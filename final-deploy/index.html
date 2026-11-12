@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOUMYA AI Assistant — Your Personal AI. Your World.</title>
+<meta name="description" content="SOUMYA AI Assistant — a personal Android AI companion with two Soumya characters, Gemini brain, Hindi / English / Hinglish voice, long-term memory, phone control, reminders and a background assistant. Free, private, your API key.">
+<meta property="og:title" content="SOUMYA AI Assistant — Your Personal AI. Your World.">
+<meta property="og:description" content="Talk, control your phone, remember everything — with Male or Female Soumya. Android 10+. Your own free Gemini API key.">
+<meta property="og:image" content="assets/logo.png">
+<link rel="icon" type="image/png" href="assets/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="bg-orbs" aria-hidden="true"><span class="orb orb-1"></span><span class="orb orb-2"></span><span class="orb orb-3"></span></div>
+
+<header class="nav">
+  <a class="brand" href="#top">
+    <img src="assets/logo.png" alt="SOUMYA AI logo" class="brand-logo">
+    <span class="brand-text"><strong>SOUMYA AI</strong><em>ASSISTANT</em></span>
+  </a>
+  <nav class="nav-links">
+    <a href="#features">Features</a>
+    <a href="#characters">Characters</a>
+    <a href="#start">Get Started</a>
+    <a href="#status">v1 Status</a>
+  </nav>
+  <a class="btn btn-small" href="/soumya-ai.apk" id="navDownload">Download APK</a>
+</header>
+
+<main id="top">
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-copy">
+      <span class="pill">v1.0.0 &nbsp;·&nbsp; Android 10+ &nbsp;·&nbsp; Free</span>
+      <h1>SOUMYA AI<br><span class="grad">ASSISTANT</span></h1>
+      <p class="tagline">Your Personal AI. Your World.</p>
+      <p class="lede">Talk to Soumya in Hindi, English or Hinglish. Open apps, set reminders, remember what matters, and get things done on your phone — hands-free, with a companion who actually remembers you.</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="/soumya-ai.apk" id="heroDownload">⬇ Download APK <small>Android 10+</small></a>
+        <a class="btn btn-ghost" href="https://github.com/somya2005-Aje/soumya-ai-assistant" target="_blank" rel="noopener">View on GitHub ↗</a>
+      </div>
+      <p class="apk-note" id="apkNote">APK v1.0.0 — the download appears here as soon as the release build is published. No account, no payment, no ads.</p>
+      <div class="hero-chips">
+        <span>🎙️ Voice-first</span><span>🧠 Gemini brain</span><span>💾 Long-term memory</span><span>🔒 Your key, your data</span>
+      </div>
+    </div>
+    <div class="hero-art">
+      <div class="portrait-card male">
+        <picture>
+          <source srcset="assets/media-generation-soumya-male-0-7df2adf5-7560-46d4-8d29-1ecd89097521.webp" type="image/webp">
+          <img src="assets/soumya-male.png" alt="Soumya — Male character" loading="eager">
+        </picture>
+        <div class="portrait-label"><strong>Soumya</strong><span>Male · Friendly · Professional</span></div>
+        <span class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+      </div>
+      <div class="portrait-card female">
+        <picture>
+          <source srcset="assets/media-generation-soumya-female-0-dc878819-ae74-4478-a418-ef4376ab361b.webp" type="image/webp">
+          <img src="assets/soumya-female.png" alt="Soumya — Female character" loading="eager">
+        </picture>
+        <div class="portrait-label"><strong>Soumya</strong><span>Female · Caring · Emotionally aware</span></div>
+        <span class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+      </div>
+      <div class="hero-logo-badge">
+        <img src="assets/logo.png" alt="SOUMYA AI logo">
+        <span>Choose your companion</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- QUICK ACTIONS STRIP -->
+  <section class="strip">
+    <div class="strip-item"><span class="ic">🎙️</span><strong>Talk</strong><small>“Soumya, YouTube kholo.”</small></div>
+    <div class="strip-item"><span class="ic">📱</span><strong>Control</strong><small>Apps, settings &amp; files</small></div>
+    <div class="strip-item"><span class="ic">🧠</span><strong>Remember</strong><small>Preferences &amp; notes</small></div>
+    <div class="strip-item"><span class="ic">⚙️</span><strong>Automate</strong><small>Multi-step tasks</small></div>
+    <div class="strip-item"><span class="ic">🔔</span><strong>Notifications</strong><small>Read &amp; summarise</small></div>
+    <div class="strip-item"><span class="ic">⏰</span><strong>Reminders</strong><small>Voice, tasks &amp; alarms</small></div>
+    <div class="strip-item"><span class="ic">💬</span><strong>Care &amp; Chat</strong><small>Jokes, motivation, support</small></div>
+    <div class="strip-item"><span class="ic">🤖</span><strong>AI Tasks</strong><small>Planned &amp; verified</small></div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="section" id="features">
+    <h2>Everything a personal AI should do</h2>
+    <p class="section-sub">Built on official Android APIs and Google Gemini — no fake actions, no silent behaviour. Every result is verified and reported honestly.</p>
+    <div class="grid">
+      <article class="card"><span class="ic">🎙️</span><h3>Voice Conversation</h3><p>Natural Hindi, English and Hinglish — including code-switching mid-sentence. Male and female voices, adjustable speed and pitch, continuous conversation with interruption and “stop speaking”.</p></article>
+      <article class="card"><span class="ic">✨</span><h3>Gemini Brain</h3><p>Google Gemini understands your words, breaks complex requests into ordered steps, picks the right tool, and explains failures instead of pretending success.</p></article>
+      <article class="card"><span class="ic">💾</span><h3>Long-Term Memory</h3><p>Room Database stores your approved preferences, notes, routines and reminders. Search, edit, export and delete anything — never passwords, OTPs or secrets.</p></article>
+      <article class="card"><span class="ic">📱</span><h3>Phone Control</h3><p>Launch apps, open settings, browse permitted files, check battery and device info — through official Android intents and APIs only.</p></article>
+      <article class="card"><span class="ic">⏰</span><h3>Reminders &amp; Alarms</h3><p>“Mujhe kal subah 6 baje yaad dilana.” Voice reminders, task lists, daily summaries and calendar help, using supported Android APIs.</p></article>
+      <article class="card"><span class="ic">🔔</span><h3>Notification Assistant</h3><p>With Notification Access granted, Soumya reads and summarises your notifications, reads them aloud, and opens the right app. Never sends secret replies.</p></article>
+      <article class="card"><span class="ic">🌙</span><h3>Background Assistant + Wake Word</h3><p>Say “Hey Soumya” and the foreground service wakes up — with a clear persistent notification, pause and disable controls. Locked-screen use depends on your Android version and device.</p></article>
+      <article class="card"><span class="ic">🔒</span><h3>Privacy &amp; Permissions</h3><p>A dedicated permission manager explains every permission in plain language, asks only when a feature needs it, and never requests everything at first launch. Your API key is stored securely on your device — never hardcoded.</p></article>
+    </div>
+  </section>
+
+  <!-- CHARACTERS -->
+  <section class="section" id="characters">
+    <h2>Meet Soumya — your way</h2>
+    <p class="section-sub">Two original companions. Pick one at first launch, switch any time. Each has its own voice, personality and speaking style.</p>
+    <div class="chars">
+      <article class="char-card">
+        <picture>
+          <source srcset="assets/media-generation-soumya-male-0-7df2adf5-7560-46d4-8d29-1ecd89097521.webp" type="image/webp">
+          <img src="assets/soumya-male.png" alt="Soumya — Male" loading="lazy">
+        </picture>
+        <div class="char-body">
+          <h3>Soumya <span class="tag">Male</span></h3>
+          <ul>
+            <li>Intelligent, friendly &amp; caring</li>
+            <li>Funny, supportive, professional when needed</li>
+            <li>Hindi, English &amp; Hinglish</li>
+            <li>Natural voice &amp; expressions</li>
+          </ul>
+        </div>
+      </article>
+      <article class="char-card">
+        <picture>
+          <source srcset="assets/media-generation-soumya-female-0-dc878819-ae74-4478-a418-ef4376ab361b.webp" type="image/webp">
+          <img src="assets/soumya-female.png" alt="Soumya — Female" loading="lazy">
+        </picture>
+        <div class="char-body">
+          <h3>Soumya <span class="tag">Female</span></h3>
+          <ul>
+            <li>Intelligent, caring &amp; emotionally aware</li>
+            <li>Funny, supportive, respectful</li>
+            <li>Hindi, English &amp; Hinglish</li>
+            <li>Natural voice &amp; expressions</li>
+          </ul>
+        </div>
+      </article>
+    </div>
+    <p class="honest-note">⚠️ <strong>Honest note:</strong> in v1 the characters are high-quality portraits with Compose animation — blinking, breathing, a speaking waveform and expressions (idle, listening, thinking, speaking, happy, sad, caring, laughing). True Unity/Unreal real-time 3D humans with full lip-sync are <strong>not</strong> in v1.</p>
+  </section>
+
+  <!-- HOW TO START -->
+  <section class="section" id="start">
+    <h2>Start in 3 steps</h2>
+    <div class="steps">
+      <div class="step"><span class="num">1</span><h3>Install the APK</h3><p>Download <code>/soumya-ai.apk</code> and install it on Android 10 or newer. Allow “Install unknown apps” for your browser when Android asks.</p></div>
+      <div class="step"><span class="num">2</span><h3>Add your free Gemini API key</h3><p>In Settings → Gemini, paste <strong>your own free</strong> Google Gemini API key (from <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio ↗</a>). It stays on your device and is never hardcoded or shared.</p></div>
+      <div class="step"><span class="num">3</span><h3>Grant permissions as needed</h3><p>Pick your Soumya, choose a voice and language, then enable only the permissions each feature asks for — microphone for voice, notifications for summaries, accessibility for automation.</p></div>
+    </div>
+    <div class="key-callout">
+      <strong>🔑 Why your own key?</strong> Chat needs a Gemini API key because there is no paid backend and no key is bundled in the app. A free Google AI Studio key is enough for personal use. Without a key, chat stays disabled — the app never fakes replies.
+    </div>
+  </section>
+
+  <!-- HONEST v1 STATUS -->
+  <section class="section" id="status">
+    <h2>Honest v1 status</h2>
+    <p class="section-sub">No fake claims. Every feature is marked exactly as it ships in v1.0.0.</p>
+    <div class="table-wrap">
+      <table class="status-table">
+        <thead><tr><th>Feature</th><th>Status</th><th>What it means</th></tr></thead>
+        <tbody>
+          <tr><td>Voice chat — Hindi / English / Hinglish</td><td><span class="badge ok">Implemented</span></td><td>Speech-to-text + text-to-speech, male &amp; female voices, speed &amp; pitch controls.</td></tr>
+          <tr><td>Gemini brain (chat, planning, tool calling)</td><td><span class="badge ok">Implemented</span></td><td>Works with your own free Gemini API key from Google AI Studio.</td></tr>
+          <tr><td>Long-term memory (Room Database)</td><td><span class="badge ok">Implemented</span></td><td>Save, search, edit, export and delete your approved memories.</td></tr>
+          <tr><td>Phone control — apps, settings, files</td><td><span class="badge ok">Implemented</span></td><td>Official Android intents &amp; APIs; results verified before reporting.</td></tr>
+          <tr><td>Reminders &amp; alarms</td><td><span class="badge ok">Implemented</span></td><td>Via supported Android APIs; exact-alarm behaviour varies by device.</td></tr>
+          <tr><td>Notification assistant</td><td><span class="badge perm">Permission-dependent</span></td><td>Needs Notification Access, granted by you in Settings.</td></tr>
+          <tr><td>Accessibility automation</td><td><span class="badge perm">Permission-dependent</span></td><td>Optional AccessibilityService you enable manually; never bypasses passwords, OTPs or payments.</td></tr>
+          <tr><td>Background assistant + wake word</td><td><span class="badge perm">Permission-dependent</span></td><td>Foreground service with persistent notification. “Hey Soumya” detection is local where supported.</td></tr>
+          <tr><td>Always-on lock-screen wake word</td><td><span class="badge limit">Platform-restricted</span></td><td>Android version, manufacturer battery policies and microphone rules may limit locked-screen operation. The app explains this and never secretly records.</td></tr>
+          <tr><td>Real-time 3D humans with full lip-sync</td><td><span class="badge limit">Not in v1</span></td><td>Unity/Unreal real-time 3D characters are not in v1. v1 characters are high-quality portraits with Compose animation (blink, breathing, speaking waveform, expressions).</td></tr>
+          <tr><td>Chat without a Gemini API key</td><td><span class="badge limit">Not in v1</span></td><td>No bundled key, no fake replies. Add your free key in Settings to enable chat.</td></tr>
+          <tr><td>Cloud sync / accounts / backup</td><td><span class="badge pending">Pending v2</span></td><td>v1 is fully on-device. No account, no cloud, no data leaves your phone unless you choose to.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="honest-note">An ordinary Android app cannot silently control every setting or third-party app. Background microphone use, file access and automation vary by Android version, manufacturer and app policy — Soumya tells you what worked and what didn’t, every time.</p>
+  </section>
+
+  <!-- TECH -->
+  <section class="section tech">
+    <h2>Built on solid tech</h2>
+    <div class="tech-grid">
+      <div><strong>Language</strong><span>Kotlin</span></div>
+      <div><strong>UI</strong><span>Jetpack Compose</span></div>
+      <div><strong>AI Engine</strong><span>Google Gemini API</span></div>
+      <div><strong>Memory</strong><span>Room Database + DataStore</span></div>
+      <div><strong>Services</strong><span>Foreground, WorkManager, NotificationListener, Accessibility</span></div>
+      <div><strong>Minimum Android</strong><span>Android 10+</span></div>
+      <div><strong>Source</strong><span><a href="https://github.com/somya2005-Aje/soumya-ai-assistant" target="_blank" rel="noopener">github.com/somya2005-Aje/soumya-ai-assistant ↗</a></span></div>
+      <div><strong>Cost</strong><span>Free · No ads · No login</span></div>
+    </div>
+  </section>
+
+  <!-- FINAL CTA -->
+  <section class="final-cta">
+    <img src="assets/logo.png" alt="SOUMYA AI logo">
+    <h2>Your Personal AI. Your World.</h2>
+    <p>Download SOUMYA AI Assistant v1.0.0 for Android.</p>
+    <a class="btn btn-primary btn-big" href="/soumya-ai.apk" id="footerDownload">⬇ Download APK — Free</a>
+    <p class="apk-note" id="apkNote2">APK v1.0.0 · Android 10+ · ~ size varies by build</p>
+  </section>
+</main>
+
+<footer>
+  <p><strong>SOUMYA AI ASSISTANT</strong> — v1.0.0 · Free, ad-free, no login. Your data stays on your device.</p>
+  <p>Chat requires your own free Gemini API key. Real-time 3D characters are not in v1 — see the <a href="#status">honest v1 status</a>.</p>
+  <p><a href="https://github.com/somya2005-Aje/soumya-ai-assistant" target="_blank" rel="noopener">GitHub</a> · Built with Kotlin + Jetpack Compose + Google Gemini</p>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

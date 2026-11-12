@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="navy_900">#070B1A</color>
+    <color name="navy_800">#0B1026</color>
+    <color name="navy_700">#11152B</color>
+    <color name="cyan_400">#21D4FD</color>
+    <color name="blue_500">#2878FF</color>
+    <color name="violet_500">#7B3FF2</color>
+    <color name="mint_400">#38E6B5</color>
+    <color name="text_primary">#F2F5FF</color>
+    <color name="text_secondary">#9AA7C7</color>
+</resources>

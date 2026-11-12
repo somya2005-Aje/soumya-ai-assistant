@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SOUMYA AI Assistant</string>
+    <string name="app_short_name">SOUMYA AI</string>
+    <string name="tagline">Your Personal AI. Your World.</string>
+    <string name="notification_listener_label">SOUMYA AI notification reader</string>
+    <string name="accessibility_service_label">SOUMYA AI automation</string>
+</resources>
