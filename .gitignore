@@ -21,3 +21,4 @@ android-app/*.iml
 assets/
 deploy.py
 final-deploy/
+build-output/
