@@ -1,6 +1,7 @@
 package ai.soumya.assistant.ui.screens
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -27,12 +28,14 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -51,6 +54,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import ai.soumya.assistant.ai.GeminiClient
 import ai.soumya.assistant.ai.LocalCommands
+import ai.soumya.assistant.ai.PermissionGate
 import ai.soumya.assistant.ai.ToolExecutor
 import ai.soumya.assistant.data.MemoryRepository
 import ai.soumya.assistant.data.Prefs
@@ -84,6 +88,13 @@ class ChatEngine(
     val messages = mutableStateListOf<ChatMessage>()
     var busy by mutableStateOf(false)
 
+    /**
+     * Permission key that blocked the last tool (PermissionGate key), or null.
+     * The UI shows the grant prompt for this key. Set when a tool is blocked
+     * for a missing grant; cleared when the user grants or dismisses it.
+     */
+    var pendingPermission by mutableStateOf<String?>(null)
+
     private fun systemPrompt(memories: List<String>): String {
         val lang = when (prefs.language) {
             "hi" -> "Reply in Hindi (Devanagari is fine)."
@@ -106,8 +117,14 @@ class ChatEngine(
         messages.add(ChatMessage("user", text))
         onState(VoiceState.THINKING)
 
-        val localReply = withContext(Dispatchers.IO) { local.handle(text) }
+        val localReply = withContext(Dispatchers.IO) {
+            executor.clearBlockedPermission()
+            local.handle(text)
+        }
         if (localReply != null) {
+            // A gated on-device command (e.g. a call without Contacts
+            // permission) returns the Hindi ask — show the grant prompt.
+            executor.lastBlockedPermission?.let { pendingPermission = it }
             reply(localReply, onState)
             busy = false
             return
@@ -132,22 +149,31 @@ class ChatEngine(
                     .getOrElse { throw it }
                 val call = first.functionCall
                 if (call == null) {
-                    first.text.ifBlank { "I could not think of a reply. Please try again." }
+                    first.text.ifBlank { "I could not think of a reply. Please try again." } to null
                 } else {
                     val outcome = executor.execute(call.name, call.args)
-                    val toolJson = JSONObject()
-                        .put("success", outcome.success)
-                        .put("result", outcome.message)
-                    val second = client.generate(
-                        systemPrompt(memories), history, text,
-                        functionResponse = toolJson, functionName = call.name
-                    ).getOrElse { throw it }
-                    val modelText = second.text.ifBlank { outcome.message }
-                    if (outcome.success) modelText else "$modelText\n\n(Tool note: ${outcome.message})"
+                    if (outcome.needsPermission != null) {
+                        // BLOCKED: reply with the Hindi ask directly — no
+                        // second Gemini call, and never claim success.
+                        outcome.message to outcome.needsPermission
+                    } else {
+                        val toolJson = JSONObject()
+                            .put("success", outcome.success)
+                            .put("result", outcome.message)
+                        val second = client.generate(
+                            systemPrompt(memories), history, text,
+                            functionResponse = toolJson, functionName = call.name
+                        ).getOrElse { throw it }
+                        val modelText = second.text.ifBlank { outcome.message }
+                        (if (outcome.success) modelText else "$modelText\n\n(Tool note: ${outcome.message})") to null
+                    }
                 }
             }
         }
-        result.onSuccess { reply(it, onState) }
+        result.onSuccess { (text, blocked) ->
+            if (blocked != null) pendingPermission = blocked
+            reply(text, onState)
+        }
             .onFailure {
                 // Friendly Hindi only — GeminiClient never returns raw codes or
                 // exception text. On-device commands keep working regardless.
@@ -190,6 +216,12 @@ fun ChatScreen(
     ) { granted ->
         if (granted) speech.startListening() else onVoiceState(VoiceState.ERROR)
     }
+
+    // Grant prompt: runtime permission request, or a deep link to the
+    // system settings screen for grants that live only there.
+    val grantLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { engine.pendingPermission = null }
 
     LaunchedEffect(engine.messages.size) {
         if (engine.messages.isNotEmpty()) listState.animateScrollToItem(engine.messages.size - 1)
@@ -264,6 +296,42 @@ fun ChatScreen(
                     }
                 }
             }
+        }
+        // Permission prompt: shown when a tool was blocked for a missing
+        // grant — the AI asked in Hindi, this card lets the user grant it.
+        val pendingPerm = engine.pendingPermission
+        if (pendingPerm != null) {
+            val req = PermissionGate.info(pendingPerm)
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = CardBg),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)
+            ) {
+                Column(Modifier.padding(12.dp)) {
+                    Text(
+                        "Permission chahiye — ${req.hindiName}",
+                        fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp
+                    )
+                    Text(req.askMessage, color = TextSecondary, fontSize = 13.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Button(onClick = {
+                            val runtime = PermissionGate.runtimePermissions(pendingPerm)
+                            if (runtime != null) {
+                                grantLauncher.launch(runtime)
+                            } else {
+                                PermissionGate.settingsIntent(context, pendingPerm)?.let { intent ->
+                                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    context.startActivity(intent)
+                                }
+                                engine.pendingPermission = null
+                            }
+                        }) { Text("Permission do") }
+                        Spacer(Modifier.width(8.dp))
+                        TextButton(onClick = { engine.pendingPermission = null }) { Text("Baad me") }
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
         }
         Row(
             Modifier.fillMaxWidth().padding(12.dp),

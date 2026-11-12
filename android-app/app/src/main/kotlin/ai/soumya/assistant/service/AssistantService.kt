@@ -13,6 +13,7 @@ import androidx.core.app.NotificationCompat
 import ai.soumya.assistant.MainActivity
 import ai.soumya.assistant.R
 import ai.soumya.assistant.ai.LocalCommands
+import ai.soumya.assistant.ai.PermissionGate
 import ai.soumya.assistant.ai.ToolExecutor
 import ai.soumya.assistant.data.MemoryRepository
 import ai.soumya.assistant.data.Prefs
@@ -89,6 +90,12 @@ class AssistantService : Service() {
 
     private fun maybeStartListening() {
         if (!prefs.wakeWordEnabled || paused || listeningLoopActive) return
+        // PERMISSION GATE: without the mic grant the service must not listen
+        // (and must not spin in an error loop) — it says so honestly instead.
+        if (!PermissionGate.isGranted(this, PermissionGate.MICROPHONE)) {
+            updateNotification("Mic permission nahi hai — app kholo aur mic allow karo, tab main sun paunga")
+            return
+        }
         listeningLoopActive = true
         speech.onSpeechResult = { heard ->
             listeningLoopActive = false

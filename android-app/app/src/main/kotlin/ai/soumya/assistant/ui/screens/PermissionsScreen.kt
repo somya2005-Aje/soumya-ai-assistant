@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import ai.soumya.assistant.ai.PermissionGate
 import ai.soumya.assistant.service.SoumyaAccessibilityService
 import ai.soumya.assistant.ui.theme.CardBg
 import ai.soumya.assistant.ui.theme.TextSecondary
@@ -94,6 +95,18 @@ fun PermissionsScreen(onBack: () -> Unit) {
             .isIgnoringBatteryOptimizations(context.packageName)
 
     val rows = listOf(
+        PermRow(
+            "Contacts", "Find a contact's number when you ask to call someone.",
+            if (PermissionGate.isGranted(context, PermissionGate.CONTACTS)) PermState.GRANTED else PermState.DENIED,
+            { multiLauncher.launch(arrayOf(Manifest.permission.READ_CONTACTS)) },
+            "Grant"
+        ),
+        PermRow(
+            "Phone calls", "Place calls when you ask (\"Ravi ko call karo\").",
+            if (PermissionGate.isGranted(context, PermissionGate.CALL)) PermState.GRANTED else PermState.DENIED,
+            { multiLauncher.launch(arrayOf(Manifest.permission.CALL_PHONE)) },
+            "Grant"
+        ),
         PermRow(
             "Microphone", "Voice input and wake-word listening.",
             runtimeState(Manifest.permission.RECORD_AUDIO),
@@ -185,6 +198,8 @@ fun PermissionsScreen(onBack: () -> Unit) {
         }
         Text(
             "Permissions are asked only when a feature needs them — never all at first launch. " +
+                "Without a grant the app will NOT do that work and will NOT claim it did — " +
+                "it asks in Hindi and shows a button to grant it. " +
                 "Some access (Notification Access, Accessibility) can only be granted in system settings.",
             fontSize = 13.sp, color = TextSecondary
         )

@@ -57,6 +57,10 @@ class GeminiClient(private val apiKey: String) {
             props("screen" to "STRING"), listOf("screen"))
         fn("create_reminder", "Create a reminder for a time in minutes from now.",
             props("text" to "STRING", "minutes_from_now" to "NUMBER"), listOf("text", "minutes_from_now"))
+        fn("make_call", "Call a contact by name or dial a phone number directly. Only works if the user granted Contacts and Phone permissions.",
+            props("target" to "STRING"), listOf("target"))
+        fn("list_recent_photos", "List recent photos from the gallery (names and dates only). Only works if the user granted Gallery permission.",
+            props("count" to "NUMBER"), emptyList())
         fn("search_memory", "Search saved long-term memories.",
             props("query" to "STRING"), listOf("query"))
         fn("save_memory", "Save a user-approved fact or preference to long-term memory.",

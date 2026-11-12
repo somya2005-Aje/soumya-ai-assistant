@@ -2,6 +2,7 @@ package ai.soumya.assistant.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -291,9 +292,16 @@ fun AutomationScreen(executor: ToolExecutor, onBack: () -> Unit) {
         Spacer(Modifier.height(16.dp))
         Text("Recent notifications", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
         Text(
-            "Shown only if Notification Access is granted (Permissions screen).",
+            "Shown only if Notification Access is granted. Without it, the app reads nothing and claims nothing.",
             fontSize = 12.sp, color = TextSecondary
         )
+        Spacer(Modifier.height(8.dp))
+        Button(onClick = {
+            val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        }) { Text("Notification Access kholo") }
         val recent = synchronized(SoumyaNotificationListener.recent) { SoumyaNotificationListener.recent.toList() }
         if (recent.isEmpty()) {
             Text("No notifications captured yet.", fontSize = 13.sp, color = TextSecondary)

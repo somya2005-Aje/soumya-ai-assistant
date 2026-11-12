@@ -6,13 +6,20 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
+import android.database.Cursor
 import android.graphics.drawable.Drawable
+import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
+import android.provider.ContactsContract
+import android.provider.MediaStore
 import android.provider.Settings
 import ai.soumya.assistant.data.MemoryRepository
 import ai.soumya.assistant.service.ReminderReceiver
 import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Executes Gemini function calls through real Android APIs and reports
@@ -23,7 +30,35 @@ class ToolExecutor(
     private val memoryRepo: MemoryRepository
 ) {
 
-    data class ToolOutcome(val success: Boolean, val message: String)
+    /**
+     * Outcome of a tool run. [needsPermission] is the PermissionGate key the
+     * user must grant before this can run (null = no grant was missing).
+     * The message is always friendly Hindi — never a raw error.
+     */
+    data class ToolOutcome(
+        val success: Boolean,
+        val message: String,
+        val needsPermission: String? = null
+    )
+
+    /**
+     * Last permission key that blocked a tool (null when the last call was
+     * not blocked). The chat layer reads this to show the grant prompt.
+     * Cleared at the start of every [execute] call.
+     */
+    var lastBlockedPermission: String? = null
+        private set
+
+    /** Clears [lastBlockedPermission] (chat layer does this before each local command). */
+    fun clearBlockedPermission() {
+        lastBlockedPermission = null
+    }
+
+    /** Builds the blocked outcome for a missing grant — tool does NOT run. */
+    private fun blocked(requirement: PermissionGate.Requirement): ToolOutcome {
+        lastBlockedPermission = requirement.key
+        return ToolOutcome(false, requirement.askMessage, needsPermission = requirement.key)
+    }
 
     /** One launchable app on the phone (launcher entry). */
     data class LaunchableApp(
@@ -84,6 +119,11 @@ class ToolExecutor(
     }
 
     suspend fun execute(name: String, args: JSONObject): ToolOutcome {
+        lastBlockedPermission = null
+        // CENTRAL GATE: no tool runs without its permissions. A blocked tool
+        // never claims success — it returns the Hindi ask instead.
+        val missing = PermissionGate.missingForTool(context, name)
+        if (missing.isNotEmpty()) return blocked(missing.first())
         return try {
             when (name) {
                 "open_application" -> openApp(args.optString("app_name"))
@@ -94,6 +134,8 @@ class ToolExecutor(
                     args.optString("text"),
                     args.optDouble("minutes_from_now", 60.0)
                 )
+                "make_call" -> makeCall(args.optString("target"))
+                "list_recent_photos" -> listRecentPhotos(args.optDouble("count", 5.0).toInt())
                 "search_memory" -> {
                     val hits = memoryRepo.search(args.optString("query"))
                     ToolOutcome(true, if (hits.isEmpty()) "No saved memories matched."
@@ -188,6 +230,113 @@ class ToolExecutor(
         )
     }
 
+    /**
+     * Calls a contact by name or dials a number directly.
+     * PERMISSION-GATED: needs Contacts (to find the number) + Phone calls.
+     * Without either grant nothing happens — the Hindi ask is returned.
+     */
+    fun makeCall(target: String): ToolOutcome {
+        val missing = PermissionGate.missingForTool(context, "make_call")
+        if (missing.isNotEmpty()) return blocked(missing.first())
+        val t = target.trim()
+        if (t.isBlank()) return ToolOutcome(false, "Kisko call karna hai, naam ya number bolo.")
+        // Direct number (digits, +, spaces, dashes) — no contact lookup needed.
+        val number: String
+        val display: String
+        if (t.matches(Regex("^[+0-9][0-9 ()-]{5,}$"))) {
+            number = t.replace(" ", "")
+            display = t
+        } else {
+            val found = findContactNumber(t)
+                ?: return ToolOutcome(
+                    false,
+                    "\"$t\" naam contacts me nahi mila — sahi naam ya number bolo."
+                )
+            number = found.second
+            display = found.first
+        }
+        val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$number")).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return try {
+            context.startActivity(intent)
+            ToolOutcome(true, "$display ko call laga raha hoon ✓")
+        } catch (_: SecurityException) {
+            // Permission was revoked between check and call — ask again.
+            blocked(PermissionGate.info(PermissionGate.CALL))
+        } catch (_: Exception) {
+            ToolOutcome(false, "$display ko call nahi lag paya, phir try karo.")
+        }
+    }
+
+    /** Finds a contact's display name + number by (partial) name, or null. */
+    private fun findContactNumber(name: String): Pair<String, String>? {
+        val uri = ContactsContract.CommonDataKinds.Phone.CONTENT_URI
+        val projection = arrayOf(
+            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+            ContactsContract.CommonDataKinds.Phone.NUMBER
+        )
+        val selection = "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} LIKE ?"
+        val selectionArgs = arrayOf("%$name%")
+        var cursor: Cursor? = null
+        return try {
+            cursor = context.contentResolver.query(uri, projection, selection, selectionArgs, null)
+            if (cursor != null && cursor.moveToFirst()) {
+                val displayName = cursor.getString(0) ?: name
+                val number = cursor.getString(1) ?: return null
+                displayName to number
+            } else {
+                null
+            }
+        } catch (_: SecurityException) {
+            null
+        } catch (_: Exception) {
+            null
+        } finally {
+            try { cursor?.close() } catch (_: Exception) { }
+        }
+    }
+
+    /**
+     * Lists recent gallery photos (names + dates only).
+     * PERMISSION-GATED: needs Gallery. Without it nothing is read.
+     */
+    fun listRecentPhotos(count: Int): ToolOutcome {
+        val missing = PermissionGate.missingForTool(context, "list_recent_photos")
+        if (missing.isNotEmpty()) return blocked(missing.first())
+        val n = count.coerceIn(1, 10)
+        val projection = arrayOf(
+            MediaStore.Images.Media.DISPLAY_NAME,
+            MediaStore.Images.Media.DATE_TAKEN
+        )
+        val names = mutableListOf<String>()
+        try {
+            context.contentResolver.query(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                projection, null, null,
+                "${MediaStore.Images.Media.DATE_TAKEN} DESC"
+            )?.use { cursor ->
+                val nameIdx = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME)
+                val dateIdx = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN)
+                while (cursor.moveToNext() && names.size < n) {
+                    val name = cursor.getString(nameIdx) ?: continue
+                    val date = SimpleDateFormat("d MMM", Locale.getDefault())
+                        .format(Date(cursor.getLong(dateIdx)))
+                    names.add("$name ($date)")
+                }
+            }
+        } catch (_: SecurityException) {
+            return blocked(PermissionGate.info(PermissionGate.GALLERY))
+        } catch (_: Exception) {
+            return ToolOutcome(false, "Gallery dekh nahi paya, phir try karo.")
+        }
+        return ToolOutcome(
+            true,
+            if (names.isEmpty()) "Gallery me koi photo nahi mili."
+            else "Recent photos:\n" + names.joinToString("\n")
+        )
+    }
+
     fun batteryStatus(): ToolOutcome {
         val bm = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
         val level = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
@@ -247,8 +396,8 @@ class ToolExecutor(
                 alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pending)
             }
             ToolOutcome(true, "Reminder set for \"$text\" in ${minutesFromNow.toInt()} minutes.")
-        } catch (e: SecurityException) {
-            ToolOutcome(false, "Exact alarms are not allowed — please enable Alarms in Settings, then try again.")
+        } catch (_: SecurityException) {
+            blocked(PermissionGate.info(PermissionGate.ALARMS))
         }
     }
 }

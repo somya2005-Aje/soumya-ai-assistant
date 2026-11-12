@@ -239,6 +239,7 @@ fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
 fun AboutScreen(onBack: () -> Unit) {
     val statuses = listOf(
         "AI chat (Gemini, with function calling)" to "Implemented — needs your free API key in Settings",
+        "Permission-gated tools (calls, gallery, reminders…)" to "Implemented — bina permission ke koi kaam nahi, AI Hindi me permission maangti hai",
         "Home talk button (big round mic)" to "Implemented — tap karke bolo, Soumya bolke jawab degi",
         "Open any installed app (voice + list)" to "Implemented — phone ke saare launchable apps",
         "Voice chat (STT + TTS, Hindi/English/Hinglish)" to "Implemented",

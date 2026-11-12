@@ -21,6 +21,20 @@ class LocalCommands(
         val t = text.trim()
         val lower = t.lowercase(Locale.getDefault())
 
+        // Call: "call Mom" / "Mom ko call karo" / "call 9876543210"
+        // (permission-gated in ToolExecutor — without Contacts/Phone grants
+        // it only asks in Hindi and does nothing).
+        val callMatch = Regex("(?i)(?:call|phone karo|call karo|call kar do)\\s+(.+)")
+            .find(t)?.groupValues?.getOrNull(1)?.trim()
+        if (callMatch != null && callMatch.isNotBlank()) {
+            return executor.makeCall(callMatch).message
+        }
+        val koCallMatch = Regex("(?i)(.+)\\s+ko\\s+call\\s+(?:karo|kar do|lagao)\\s*$")
+            .find(t)?.groupValues?.getOrNull(1)?.trim()
+        if (koCallMatch != null && koCallMatch.length > 1) {
+            return executor.makeCall(koCallMatch).message
+        }
+
         // Open app: "open YouTube" / "youtube kholo" / "soumya, chrome kholo"
         val openMatch = Regex("(?i)(?:open|kholo|khol|launch|start)\\s+(.+)", RegexOption.IGNORE_CASE)
             .find(t)?.groupValues?.getOrNull(1)?.trim()
