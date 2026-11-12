@@ -5,6 +5,8 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.ResolveInfo
+import android.graphics.drawable.Drawable
 import android.os.BatteryManager
 import android.os.Build
 import android.provider.Settings
@@ -22,6 +24,64 @@ class ToolExecutor(
 ) {
 
     data class ToolOutcome(val success: Boolean, val message: String)
+
+    /** One launchable app on the phone (launcher entry). */
+    data class LaunchableApp(
+        val label: String,
+        val packageName: String,
+        val icon: Drawable?
+    )
+
+    /**
+     * ALL launchable installed apps, sorted by name. Uses the launcher
+     * intent query, so every app the user can open from the home screen
+     * shows up — no hardcoded short list. Requires the <queries> launcher
+     * intent in AndroidManifest.xml (Android 11+ package visibility).
+     */
+    fun listLaunchableApps(): List<LaunchableApp> {
+        val pm: PackageManager = context.packageManager
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val resolveInfos: List<ResolveInfo> = try {
+            pm.queryIntentActivities(intent, 0)
+        } catch (_: Exception) {
+            emptyList()
+        }
+        return resolveInfos.mapNotNull { info ->
+            val activityInfo = info.activityInfo ?: return@mapNotNull null
+            val label = try {
+                info.loadLabel(pm).toString()
+            } catch (_: Exception) {
+                activityInfo.packageName
+            }
+            val icon = try {
+                info.loadIcon(pm)
+            } catch (_: Exception) {
+                null
+            }
+            LaunchableApp(label, activityInfo.packageName, icon)
+        }.sortedBy { it.label.lowercase() }
+    }
+
+    /** Launch an app directly by package name. Returns a verified outcome. */
+    fun launchPackage(packageName: String): ToolOutcome {
+        if (packageName.isBlank()) return ToolOutcome(false, "Koi app nahi chuni gayi.")
+        val pm: PackageManager = context.packageManager
+        val label = try {
+            val info = pm.getApplicationInfo(packageName, 0)
+            pm.getApplicationLabel(info).toString()
+        } catch (_: Exception) {
+            packageName
+        }
+        val intent = pm.getLaunchIntentForPackage(packageName)
+            ?: return ToolOutcome(false, "\"$label\" khul nahi paya — iska koi launch screen nahi hai.")
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return try {
+            context.startActivity(intent)
+            ToolOutcome(true, "$label khul gaya ✓")
+        } catch (_: Exception) {
+            ToolOutcome(false, "$label khul nahi paya, phir try karo.")
+        }
+    }
 
     suspend fun execute(name: String, args: JSONObject): ToolOutcome {
         return try {
@@ -46,34 +106,86 @@ class ToolExecutor(
                 }
                 else -> ToolOutcome(false, "Unknown tool: $name")
             }
-        } catch (e: Exception) {
-            ToolOutcome(false, "Failed: ${e.message ?: e.javaClass.simpleName}")
+        } catch (_: Exception) {
+            ToolOutcome(false, "Wo kaam nahi ho paya, phir try karo.")
         }
     }
 
-    /** Finds an installed app by display name (fuzzy) and launches it. */
+    /**
+     * Finds an installed app by display name (fuzzy) and launches it.
+     * Matching is case-insensitive and partial ("youtube" matches
+     * "YouTube"), and common Hindi names map to their English labels
+     * ("यूट्यूब" → YouTube). Always searches the full launcher list.
+     */
     fun openApp(appName: String): ToolOutcome {
-        if (appName.isBlank()) return ToolOutcome(false, "No app name given.")
-        val pm: PackageManager = context.packageManager
-        val apps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
-        val query = appName.trim().lowercase()
+        if (appName.isBlank()) return ToolOutcome(false, "Kaunsi app kholni hai, naam bolo.")
+        val query = normalizeAppQuery(appName)
+        if (query.isBlank()) return ToolOutcome(false, "Kaunsi app kholni hai, naam bolo.")
+        val apps = listLaunchableApps()
         val match = apps.firstOrNull {
-            pm.getApplicationLabel(it).toString().lowercase() == query
+            it.label.lowercase() == query
         } ?: apps.firstOrNull {
-            pm.getApplicationLabel(it).toString().lowercase().contains(query)
+            it.label.lowercase().contains(query)
         } ?: apps.firstOrNull {
             it.packageName.lowercase().contains(query.replace(" ", ""))
-        } ?: return ToolOutcome(false, "I could not find an installed app named \"$appName\".")
-        val label = pm.getApplicationLabel(match).toString()
-        val intent = pm.getLaunchIntentForPackage(match.packageName)
-            ?: return ToolOutcome(false, "\"$label\" is installed but has no launch screen I can open.")
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        return try {
-            context.startActivity(intent)
-            ToolOutcome(true, "Opened $label.")
-        } catch (e: Exception) {
-            ToolOutcome(false, "Could not open $label: ${e.message}")
+        } ?: return ToolOutcome(
+            false,
+            "Ye app nahi mila — naam dobara check karke bolo, ya Automation Center me list se chuno."
+        )
+        return launchPackage(match.packageName)
+    }
+
+    /**
+     * Normalizes a spoken/typed app name for matching: trims, lowercases,
+     * strips filler words ("kholo", "ko", "app", "mera", "the") and maps
+     * common Hindi names to their English labels.
+     */
+    private fun normalizeAppQuery(raw: String): String {
+        var q = raw.trim().lowercase()
+        for (suffix in listOf(" kholo", " khol", " ko", " app", " open karo", " chalao")) {
+            if (q.endsWith(suffix)) q = q.removeSuffix(suffix)
         }
+        for (prefix in listOf("mera ", "meri ", "the ")) {
+            if (q.startsWith(prefix)) q = q.removePrefix(prefix)
+        }
+        q = q.trim()
+        return HINDI_APP_NAMES[q] ?: q
+    }
+
+    companion object {
+        /** Common Hindi names users speak → the app's English label. */
+        private val HINDI_APP_NAMES = mapOf(
+            "यूट्यूब" to "youtube",
+            "व्हाट्सएप" to "whatsapp",
+            "वॉट्सऐप" to "whatsapp",
+            "क्रोम" to "chrome",
+            "गूगल" to "google",
+            "फेसबुक" to "facebook",
+            "इंस्टाग्राम" to "instagram",
+            "मैप्स" to "maps",
+            "मैप" to "maps",
+            "कैमरा" to "camera",
+            "गैलरी" to "gallery",
+            "सेटिंग्स" to "settings",
+            "सेटिंग" to "settings",
+            "फोन" to "phone",
+            "मैसेज" to "messages",
+            "संदेश" to "messages",
+            "जीमेल" to "gmail",
+            "मेल" to "gmail",
+            "प्ले स्टोर" to "play store",
+            "यूट्यूब म्यूजिक" to "youtube music",
+            "टेलीग्राम" to "telegram",
+            "स्पॉटिफाई" to "spotify",
+            "नेटफ्लिक्स" to "netflix",
+            "कैलकुलेटर" to "calculator",
+            "घड़ी" to "clock",
+            "कैलेंडर" to "calendar",
+            "फोटो" to "photos",
+            "फाइल" to "files",
+            "फाइल्स" to "files",
+            "नोट्स" to "notes"
+        )
     }
 
     fun batteryStatus(): ToolOutcome {
@@ -112,8 +224,8 @@ class ToolExecutor(
             }
             context.startActivity(intent)
             ToolOutcome(true, "Opened $screen settings.")
-        } catch (e: Exception) {
-            ToolOutcome(false, "Could not open $screen settings: ${e.message}")
+        } catch (_: Exception) {
+            ToolOutcome(false, "$screen settings khul nahi payi, phir try karo.")
         }
     }
 

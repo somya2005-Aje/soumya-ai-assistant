@@ -10,7 +10,12 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Gemini REST client (gemini-2.0-flash) with function declarations.
- * The API key comes only from the user's Settings field — never hardcoded.
+ * The API key comes only from the user's Settings field (or a build-time
+ * baked-in key) — never hardcoded.
+ *
+ * FRIENDLY-ERROR RULE: no raw HTTP code, response body, exception message or
+ * stack trace ever reaches the user. Every failure is mapped to a short
+ * Hindi message the user can act on.
  */
 class GeminiClient(private val apiKey: String) {
 
@@ -105,11 +110,16 @@ class GeminiClient(private val apiKey: String) {
             client.newCall(request).execute().use { response ->
                 val raw = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
-                    return Result.failure(IllegalStateException("Gemini HTTP ${response.code}: ${raw.take(300)}"))
+                    // Never surface the HTTP code or the raw error body.
+                    return Result.failure(Exception(friendlyMessageForCode(response.code)))
                 }
-                val json = JSONObject(raw)
+                val json = try {
+                    JSONObject(raw)
+                } catch (_: Exception) {
+                    return Result.failure(Exception("AI se jawab nahi mila, phir try karo."))
+                }
                 val candidates = json.optJSONArray("candidates") ?: return Result.failure(
-                    IllegalStateException("Gemini returned no candidates: ${raw.take(300)}")
+                    Exception("AI se jawab nahi mila, phir try karo.")
                 )
                 val content = candidates.getJSONObject(0).optJSONObject("content")
                 val parts = content?.optJSONArray("parts") ?: JSONArray()
@@ -125,8 +135,25 @@ class GeminiClient(private val apiKey: String) {
                 }
                 Result.success(GeminiResult(text.trim(), call))
             }
-        } catch (e: Exception) {
-            Result.failure(e)
+        } catch (e: java.io.IOException) {
+            // Network failure (no internet, DNS, timeout) — never show the details.
+            Result.failure(Exception("Internet se connect nahi ho paya — connection check karke phir try karo."))
+        } catch (_: Exception) {
+            Result.failure(Exception("Kuch gadbad ho gayi, phir try karo."))
+        }
+    }
+
+    companion object {
+        /**
+         * Maps an HTTP status to a friendly Hindi message.
+         * No codes, bodies or exception text are ever shown to the user.
+         */
+        fun friendlyMessageForCode(code: Int): String = when (code) {
+            400, 401, 403 -> "Key check nahi ho payi — Settings me key dobara daalo, ya AI Studio se nayi free key banao."
+            404 -> "AI service nahi mili, phir try karo."
+            429 -> "Abhi bahut requests hain, thodi der baad phir try karo."
+            in 500..599 -> "AI service abhi busy hai, thodi der baad phir try karo."
+            else -> "AI se jawab nahi mila, phir try karo."
         }
     }
 }

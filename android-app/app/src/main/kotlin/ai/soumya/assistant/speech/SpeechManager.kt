@@ -89,7 +89,7 @@ class SpeechManager(
     /** One-shot speech recognition. Call [stopListening] to end early. */
     fun startListening() {
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
-            onSpeechError?.invoke("Speech recognition is not available on this device.")
+            onSpeechError?.invoke("Is phone me voice recognition nahi hai — type karke bolo.")
             return
         }
         stopListening()
@@ -113,7 +113,7 @@ class SpeechManager(
             override fun onEndOfSpeech() {}
             override fun onError(error: Int) {
                 if (error != SpeechRecognizer.ERROR_NO_MATCH && error != SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
-                    onSpeechError?.invoke("Could not hear that (error $error). Please try again.")
+                    onSpeechError?.invoke("Sun nahi paya, phir se bolo.")
                 } else {
                     onStateChange?.invoke(VoiceState.IDLE)
                 }
@@ -130,8 +130,8 @@ class SpeechManager(
         })
         try {
             rec.startListening(intent)
-        } catch (e: Exception) {
-            onSpeechError?.invoke("Microphone error: ${e.message}")
+        } catch (_: Exception) {
+            onSpeechError?.invoke("Mic se sun nahi paya, phir try karo.")
             recognizer = null
         }
     }

@@ -76,35 +76,49 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                /**
+                 * Home talk flow: tap the big mic → listen → send to Gemini /
+                 * on-device commands → speak the reply aloud, all on Home.
+                 * Tap again while listening/speaking to stop.
+                 */
+                fun beginHomeListening() {
+                    voiceState = VoiceState.LISTENING
+                    speech.onSpeechResult = { heard ->
+                        scope.launch { engine.send(heard) { voiceState = it } }
+                    }
+                    speech.onSpeechError = { friendly ->
+                        voiceState = VoiceState.IDLE
+                        quickResult = friendly
+                    }
+                    speech.onStateChange = { voiceState = it }
+                    speech.startListening()
+                }
+
                 val micPermission = androidx.activity.compose.rememberLauncherForActivityResult(
                     ActivityResultContracts.RequestPermission()
                 ) { granted ->
                     if (granted) {
-                        voiceState = VoiceState.LISTENING
-                        speech.onSpeechResult = { heard ->
-                            chatDraft = heard
-                            navController.navigate("chat")
-                        }
-                        speech.onSpeechError = { voiceState = VoiceState.ERROR }
-                        speech.onStateChange = { voiceState = it }
-                        speech.startListening()
+                        beginHomeListening()
                     } else {
-                        voiceState = VoiceState.ERROR
-                        quickResult = "Microphone permission is needed for voice input."
+                        voiceState = VoiceState.IDLE
+                        quickResult = "Baat karne ke liye mic permission chahiye — Settings me allow karo."
                     }
                 }
 
                 fun startVoiceInput() {
+                    if (speech.isListening()) {
+                        speech.stopListening()
+                        voiceState = VoiceState.IDLE
+                        return
+                    }
+                    if (voiceState == VoiceState.SPEAKING) {
+                        speech.stopSpeaking()
+                        voiceState = VoiceState.IDLE
+                        return
+                    }
                     if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
                         == PackageManager.PERMISSION_GRANTED) {
-                        voiceState = VoiceState.LISTENING
-                        speech.onSpeechResult = { heard ->
-                            chatDraft = heard
-                            navController.navigate("chat")
-                        }
-                        speech.onSpeechError = { voiceState = VoiceState.ERROR }
-                        speech.onStateChange = { voiceState = it }
-                        speech.startListening()
+                        beginHomeListening()
                     } else {
                         micPermission.launch(Manifest.permission.RECORD_AUDIO)
                     }
@@ -135,6 +149,7 @@ class MainActivity : ComponentActivity() {
                             voiceState = voiceState,
                             hasGeminiKey = hasKey,
                             recentMemories = recentMemories,
+                            engine = engine,
                             onMic = ::startVoiceInput,
                             onOpenChat = { text ->
                                 chatDraft = text

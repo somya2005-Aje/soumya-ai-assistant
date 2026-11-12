@@ -1,7 +1,14 @@
 package ai.soumya.assistant.ui.screens
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,6 +31,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -42,6 +50,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -55,6 +66,7 @@ import ai.soumya.assistant.data.Prefs
 import ai.soumya.assistant.speech.VoiceState
 import ai.soumya.assistant.ui.CharacterView
 import ai.soumya.assistant.ui.StatusChip
+import ai.soumya.assistant.ui.WaveformBars
 import ai.soumya.assistant.ui.theme.CardBg
 import ai.soumya.assistant.ui.theme.Cyan400
 import ai.soumya.assistant.ui.theme.TextSecondary
@@ -149,6 +161,7 @@ fun HomeScreen(
     voiceState: VoiceState,
     hasGeminiKey: Boolean,
     recentMemories: List<MemoryEntity>,
+    engine: ChatEngine,
     onMic: () -> Unit,
     onOpenChat: (String) -> Unit,
     onNavigate: (String) -> Unit,
@@ -163,6 +176,9 @@ fun HomeScreen(
         in 17..20 -> "Good evening"
         else -> "Good night"
     }
+    // Last spoken reply, shown right under the mic button so the user sees
+    // what Soumya answered without opening Chat.
+    val lastReply = engine.messages.lastOrNull { it.role == "model" }?.text.orEmpty()
     Column(
         modifier = Modifier.fillMaxSize().background(Color(0xFF070B1A))
             .padding(horizontal = 20.dp).verticalScroll(rememberScrollState()),
@@ -175,22 +191,58 @@ fun HomeScreen(
                 Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = Color.White)
             }
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(4.dp))
+        // Character portrait sits ABOVE the talk button.
         CharacterView(
             character = prefs.character,
             state = voiceState,
-            mood = "$greeting! How can I help you today?"
+            mood = "$greeting! How can I help you today?",
+            portraitSize = 150.dp
         )
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(4.dp))
         StatusChip(
-            if (hasGeminiKey) "Gemini connected" else "Gemini key needed — on-device mode",
+            if (hasGeminiKey) "Gemini connected ✓" else "On-device mode — key Settings me daalo",
             hasGeminiKey
         )
+        Spacer(Modifier.height(20.dp))
+        // HERO: the big round talk button — the most prominent element on Home.
+        BigMicButton(voiceState = voiceState, onMic = onMic)
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = when (voiceState) {
+                VoiceState.LISTENING -> "Sun raha hoon… bolo"
+                VoiceState.THINKING -> "Soch raha hoon…"
+                VoiceState.SPEAKING -> "Bol raha hoon… (rokne ke liye tap karo)"
+                VoiceState.ERROR -> "Sun nahi paya — phir se tap karke bolo"
+                VoiceState.IDLE -> "Tap karke bolo"
+            },
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = if (voiceState == VoiceState.IDLE) Color.White else Cyan400
+        )
+        if (voiceState == VoiceState.LISTENING || voiceState == VoiceState.SPEAKING) {
+            Spacer(Modifier.height(10.dp))
+            WaveformBars()
+        }
+        if (lastReply.isNotBlank()) {
+            Spacer(Modifier.height(14.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = CardBg)
+            ) {
+                Text(
+                    lastReply,
+                    fontSize = 14.sp,
+                    color = Color.White,
+                    modifier = Modifier.padding(12.dp)
+                )
+            }
+        }
         if (quickResult.isNotBlank()) {
             Spacer(Modifier.height(10.dp))
             Text(quickResult, fontSize = 13.sp, color = TextSecondary)
         }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(18.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = input,
@@ -199,13 +251,6 @@ fun HomeScreen(
                 modifier = Modifier.weight(1f),
                 singleLine = true
             )
-            Spacer(Modifier.width(8.dp))
-            IconButton(
-                onClick = onMic,
-                modifier = Modifier.size(52.dp).background(Violet500, CircleShape)
-            ) {
-                Icon(Icons.Filled.Mic, contentDescription = "Speak", tint = Color.White)
-            }
             Spacer(Modifier.width(8.dp))
             IconButton(
                 onClick = { if (input.isNotBlank()) { onOpenChat(input); input = "" } },
@@ -250,6 +295,69 @@ fun HomeScreen(
             ) { Text("Open Memory Center") }
         }
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+/**
+ * The Home hero: a big (~200dp) round mic button with a glowing cyan ring.
+ * Pulses while listening/speaking so the state is obvious at a glance.
+ * Tap → listen → Gemini answers aloud; tap again while listening/speaking
+ * to stop.
+ */
+@Composable
+fun BigMicButton(voiceState: VoiceState, onMic: () -> Unit) {
+    val active = voiceState == VoiceState.LISTENING || voiceState == VoiceState.SPEAKING
+    val pulse = rememberInfiniteTransition(label = "micPulse")
+    val scale by pulse.animateFloat(
+        initialValue = 1f,
+        targetValue = if (active) 1.08f else 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(700, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "micScale"
+    )
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier.size(220.dp)
+    ) {
+        // Outer glow ring.
+        Box(
+            modifier = Modifier
+                .size(220.dp)
+                .scale(scale)
+                .background(Color.Transparent, CircleShape)
+                .border(
+                    width = 3.dp,
+                    brush = Brush.sweepGradient(
+                        listOf(Cyan400, Violet500, Cyan400, Color(0xFF38E6B5), Cyan400)
+                    ),
+                    shape = CircleShape
+                )
+        )
+        // Inner button.
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(196.dp)
+                .scale(if (active) scale else 1f)
+                .shadow(24.dp, CircleShape)
+                .background(
+                    brush = Brush.radialGradient(
+                        listOf(Cyan400, Violet500),
+                        radius = 260f
+                    ),
+                    shape = CircleShape
+                )
+                .clickable(onClick = onMic)
+        ) {
+            Icon(
+                if (voiceState == VoiceState.SPEAKING) Icons.Filled.Stop else Icons.Filled.Mic,
+                contentDescription = "Tap karke bolo",
+                tint = Color.White,
+                modifier = Modifier.size(76.dp)
+            )
+        }
     }
 }
 

@@ -28,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,10 +40,14 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ai.soumya.assistant.ai.GeminiClient
 import ai.soumya.assistant.data.Prefs
 import ai.soumya.assistant.service.AssistantService
 import ai.soumya.assistant.ui.theme.CardBg
 import ai.soumya.assistant.ui.theme.TextSecondary
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun SettingsScreen(
@@ -52,6 +57,7 @@ fun SettingsScreen(
     onOpenPermissions: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var character by remember { mutableStateOf(prefs.character) }
     var language by remember { mutableStateOf(prefs.language) }
     var rate by remember { mutableStateOf(prefs.speechRate) }
@@ -62,6 +68,8 @@ fun SettingsScreen(
     var apiKey by remember { mutableStateOf(prefs.geminiApiKey ?: "") }
     var keyVisible by remember { mutableStateOf(false) }
     var keySaved by remember { mutableStateOf(false) }
+    var keyNote by remember { mutableStateOf("") }
+    var checkingKey by remember { mutableStateOf(false) }
 
     Column(
         Modifier.fillMaxSize().background(Color(0xFF070B1A)).padding(16.dp)
@@ -119,25 +127,60 @@ fun SettingsScreen(
 
         Section("Gemini API key")
         Text(
-            "Your free key from Google AI Studio (aistudio.google.com). Stored encrypted on this device only — never uploaded, never in the app code.",
+            "Your free key from Google AI Studio (aistudio.google.com). Any AI Studio key works — " +
+                "just paste it, no special format needed. Stored encrypted on this device only — " +
+                "never uploaded, never in the app code, never shown to anyone.",
             fontSize = 12.sp, color = TextSecondary
         )
+        if (prefs.hasUserKey()) {
+            Spacer(Modifier.height(6.dp))
+            Text("Key saved hai ✓ — value kabhi dikhayi nahi jayegi.", color = Color(0xFF38E6B5), fontSize = 13.sp)
+        } else {
+            Spacer(Modifier.height(6.dp))
+            Text("Abhi koi key nahi hai — app on-device mode me chal rahi hai.", fontSize = 13.sp, color = TextSecondary)
+        }
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(
             value = apiKey,
-            onValueChange = { apiKey = it; keySaved = false },
+            onValueChange = { apiKey = it; keySaved = false; keyNote = "" },
             label = { Text("Gemini API key") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation()
         )
         Row {
-            Button(onClick = {
-                prefs.geminiApiKey = apiKey
-                keySaved = true
-            }) { Text("Save key") }
+            Button(
+                enabled = !checkingKey,
+                onClick = {
+                    // Any non-empty key is accepted — no strict format check.
+                    // The key is saved first, then silently verified in the
+                    // background; a failed check only shows a friendly note.
+                    val trimmed = apiKey.trim()
+                    if (trimmed.isBlank()) {
+                        keyNote = "Pehle key paste karo."
+                        return@Button
+                    }
+                    prefs.geminiApiKey = trimmed
+                    keySaved = true
+                    keyNote = ""
+                    checkingKey = true
+                    scope.launch(Dispatchers.IO) {
+                        val ok = try {
+                            GeminiClient(trimmed)
+                                .generate("Reply with just OK.", emptyList(), "hi")
+                                .isSuccess
+                        } catch (_: Exception) {
+                            false
+                        }
+                        withContext(Dispatchers.Main) {
+                            checkingKey = false
+                            keyNote = if (ok) "Key save ho gayi ✓" else "Key check nahi ho payi, phir try karo."
+                        }
+                    }
+                }
+            ) { Text(if (checkingKey) "Checking…" else "Save key") }
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = { apiKey = ""; prefs.geminiApiKey = null; keySaved = false }) {
+            OutlinedButton(onClick = { apiKey = ""; prefs.geminiApiKey = null; keySaved = false; keyNote = "" }) {
                 Text("Clear key")
             }
             Spacer(Modifier.height(8.dp))
@@ -146,6 +189,7 @@ fun SettingsScreen(
             }
         }
         if (keySaved) Text("Key saved securely.", color = Color(0xFF38E6B5), fontSize = 13.sp)
+        if (keyNote.isNotBlank()) Text(keyNote, color = Color(0xFF38E6B5), fontSize = 13.sp)
 
         Section("Privacy & permissions")
         Text(
@@ -195,6 +239,8 @@ fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
 fun AboutScreen(onBack: () -> Unit) {
     val statuses = listOf(
         "AI chat (Gemini, with function calling)" to "Implemented — needs your free API key in Settings",
+        "Home talk button (big round mic)" to "Implemented — tap karke bolo, Soumya bolke jawab degi",
+        "Open any installed app (voice + list)" to "Implemented — phone ke saare launchable apps",
         "Voice chat (STT + TTS, Hindi/English/Hinglish)" to "Implemented",
         "Male / Female Soumya characters" to "Implemented — animated portraits (v1)",
         "Real-time 3D human + full lip-sync" to "Pending (v2) — needs a Unity project; NOT in v1",
@@ -218,7 +264,7 @@ fun AboutScreen(onBack: () -> Unit) {
             }
             Text("About SOUMYA AI", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
         }
-        Text("SOUMYA AI Assistant v1.0.0 — \"Your Personal AI. Your World.\"", fontSize = 14.sp, color = Color.White)
+        Text("SOUMYA AI Assistant v1.1.0 — \"Your Personal AI. Your World.\"", fontSize = 14.sp, color = Color.White)
         Spacer(Modifier.height(12.dp))
         Text(
             "Honest limits in v1:\n\n" +

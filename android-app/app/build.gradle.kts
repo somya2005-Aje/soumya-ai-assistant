@@ -13,8 +13,8 @@ android {
         applicationId = "ai.soumya.assistant"
         minSdk = 29
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -39,7 +39,20 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
+
+    // Baked-in key slot (kept for future use). No real key is ever committed:
+    // the value comes only from the GEMINI_API_KEY env var or the
+    // -PgeminiApiKey Gradle property, and defaults to "" (empty = no key).
+    // The app always prefers the user's own key from Settings.
+    buildConfigField(
+        "String",
+        "GEMINI_API_KEY",
+        "\"" + (System.getenv("GEMINI_API_KEY")
+            ?: project.findProperty("geminiApiKey") as? String
+            ?: "") + "\""
+    )
 
     packaging {
         resources {

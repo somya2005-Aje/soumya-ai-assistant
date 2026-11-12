@@ -67,13 +67,12 @@ import org.json.JSONObject
 
 data class ChatMessage(val role: String, val text: String, val isError: Boolean = false)
 
-const val GEMINI_SETUP_GUIDE = "Gemini is not set up yet, so I am running on-device only.\n\n" +
-    "To enable full AI chat:\n" +
-    "1. Open Google AI Studio (aistudio.google.com) in your browser.\n" +
-    "2. Create a free API key.\n" +
-    "3. Paste it in Settings → Gemini API key.\n\n" +
-    "Until then I can still open apps, check battery and device info, set reminders, " +
-    "save memories and answer time/date questions — try \"open YouTube\" or \"battery status\"."
+const val GEMINI_SETUP_GUIDE = "Abhi main on-device mode me hoon — bina key ke bhi kaam kar sakta hoon.\n\n" +
+    "Full AI chat ke liye:\n" +
+    "1. Browser me Google AI Studio kholo (aistudio.google.com).\n" +
+    "2. Free API key banao.\n" +
+    "3. Settings → Gemini API key me paste karo.\n\n" +
+    "Tab tak try karo: \"YouTube kholo\", \"battery status\", ya \"remember that I prefer Hindi\"."
 
 class ChatEngine(
     private val prefs: Prefs,
@@ -114,7 +113,9 @@ class ChatEngine(
             return
         }
 
-        val key = prefs.geminiApiKey
+        // Key resolution: user's own Settings key first, then a baked-in
+        // build-time key (normally empty — never hardcoded).
+        val key = prefs.effectiveGeminiKey()
         if (key == null) {
             reply(GEMINI_SETUP_GUIDE, onState)
             busy = false
@@ -147,7 +148,17 @@ class ChatEngine(
             }
         }
         result.onSuccess { reply(it, onState) }
-            .onFailure { reply("Sorry, Gemini failed: ${it.message}", onState, isError = true) }
+            .onFailure {
+                // Friendly Hindi only — GeminiClient never returns raw codes or
+                // exception text. On-device commands keep working regardless.
+                val friendly = it.message
+                    ?: "AI se jawab nahi mila, phir try karo."
+                reply(
+                    "$friendly\n\nTab tak on-device kaam chal rahe hain — \"YouTube kholo\" ya \"battery status\" bolo.",
+                    onState,
+                    isError = true
+                )
+            }
         busy = false
     }
 

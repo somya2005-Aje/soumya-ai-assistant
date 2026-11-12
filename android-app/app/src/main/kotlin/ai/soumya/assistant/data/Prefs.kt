@@ -71,5 +71,26 @@ class Prefs(context: Context) {
             else secure.edit().putString("gemini_api_key", value.trim()).apply()
         }
 
-    fun hasGeminiKey(): Boolean = geminiApiKey != null
+    /** True when the user has saved their own key in Settings. */
+    fun hasUserKey(): Boolean = geminiApiKey != null
+
+    /**
+     * Key actually used for Gemini calls. Resolution order:
+     * 1. the user's own key from Settings (any AI Studio / free key works),
+     * 2. a baked-in BuildConfig key, if one was supplied at build time
+     *    (normally empty — no key is ever hardcoded or committed),
+     * 3. null = on-device only + setup guide.
+     * The key value is never shown in UI and never logged.
+     */
+    fun effectiveGeminiKey(): String? {
+        geminiApiKey?.let { return it }
+        val bakedIn = try {
+            ai.soumya.assistant.BuildConfig.GEMINI_API_KEY
+        } catch (_: Exception) {
+            ""
+        }.trim()
+        return bakedIn.ifBlank { null }
+    }
+
+    fun hasGeminiKey(): Boolean = effectiveGeminiKey() != null
 }

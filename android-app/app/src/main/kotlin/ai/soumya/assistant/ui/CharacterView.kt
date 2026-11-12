@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ai.soumya.assistant.R
@@ -52,7 +53,8 @@ fun CharacterView(
     character: Prefs.Character,
     state: VoiceState,
     mood: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    portraitSize: Dp = 240.dp
 ) {
     // Idle breathing: slow 4s scale loop.
     val breathing = rememberInfiniteTransition(label = "breathing")
@@ -75,7 +77,7 @@ fun CharacterView(
                 contentDescription = "$name portrait",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
-                    .size(240.dp)
+                    .size(portraitSize)
                     .clip(CircleShape)
                     .scale(breatheScale)
             )
@@ -99,7 +101,7 @@ fun CharacterView(
                 VoiceState.LISTENING -> "Listening…"
                 VoiceState.THINKING -> "Thinking…"
                 VoiceState.SPEAKING -> "Speaking…"
-                VoiceState.ERROR -> "Something went wrong"
+                VoiceState.ERROR -> "Sun nahi paya, phir try karo"
                 VoiceState.IDLE -> mood
             },
             fontSize = 14.sp,

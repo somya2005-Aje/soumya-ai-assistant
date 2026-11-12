@@ -4,8 +4,11 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,6 +16,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -27,6 +33,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -36,16 +43,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.graphics.drawable.toBitmap
 import ai.soumya.assistant.ai.ToolExecutor
+import ai.soumya.assistant.ai.ToolExecutor.LaunchableApp
 import ai.soumya.assistant.service.SoumyaNotificationListener
 import ai.soumya.assistant.ui.theme.CardBg
+import ai.soumya.assistant.ui.theme.Cyan400
 import ai.soumya.assistant.ui.theme.TextSecondary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -65,6 +77,20 @@ fun AutomationScreen(executor: ToolExecutor, onBack: () -> Unit) {
     var pickedFile by remember { mutableStateOf<String?>(null) }
     var folderToDelete by remember { mutableStateOf<File?>(null) }
     var lastResult by remember { mutableStateOf("") }
+
+    // Full launcher app list (every launchable app on the phone).
+    var allApps by remember { mutableStateOf(emptyList<LaunchableApp>()) }
+    var appSearch by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) {
+        allApps = withContext(Dispatchers.IO) { executor.listLaunchableApps() }
+    }
+    val filteredApps = remember(appSearch, allApps) {
+        val q = appSearch.trim().lowercase()
+        if (q.isBlank()) allApps
+        else allApps.filter {
+            it.label.lowercase().contains(q) || it.packageName.lowercase().contains(q.replace(" ", ""))
+        }
+    }
 
     fun log(description: String, status: String) {
         history.add(0, AutomationTask(description, status))
@@ -112,6 +138,76 @@ fun AutomationScreen(executor: ToolExecutor, onBack: () -> Unit) {
                     launch(Dispatchers.Main) { log("Open app: $appName", outcome.message) }
                 }
             }) { Text("Open") }
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Text("Saare apps (${allApps.size})", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        Text(
+            "Phone ke saare apps — search karo, tap karo, khul jayega.",
+            fontSize = 13.sp, color = TextSecondary
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = appSearch, onValueChange = { appSearch = it },
+            placeholder = { Text("Search apps…") },
+            modifier = Modifier.fillMaxWidth(), singleLine = true
+        )
+        Spacer(Modifier.height(8.dp))
+        if (allApps.isEmpty()) {
+            Text("Apps load ho rahe hain…", fontSize = 13.sp, color = TextSecondary)
+        } else if (filteredApps.isEmpty()) {
+            Text("Koi app nahi mila — naam dobara check karo.", fontSize = 13.sp, color = TextSecondary)
+        } else {
+            Box(Modifier.fillMaxWidth().height(420.dp)) {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(filteredApps, key = { it.packageName }) { app ->
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = CardBg),
+                            modifier = Modifier.fillMaxWidth().clickable {
+                                scope.launch(Dispatchers.IO) {
+                                    val outcome = executor.launchPackage(app.packageName)
+                                    launch(Dispatchers.Main) { log("Open app: ${app.label}", outcome.message) }
+                                }
+                            }
+                        ) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                val bitmap = remember(app) {
+                                    try {
+                                        app.icon?.toBitmap(96, 96)?.asImageBitmap()
+                                    } catch (_: Exception) {
+                                        null
+                                    }
+                                }
+                                if (bitmap != null) {
+                                    Image(
+                                        bitmap = bitmap,
+                                        contentDescription = app.label,
+                                        modifier = Modifier.size(40.dp)
+                                    )
+                                } else {
+                                    Box(
+                                        Modifier.size(40.dp).background(Cyan400, androidx.compose.foundation.shape.CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            app.label.firstOrNull()?.toString() ?: "?",
+                                            color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp
+                                        )
+                                    }
+                                }
+                                Text(
+                                    app.label,
+                                    fontSize = 14.sp, color = Color.White,
+                                    modifier = Modifier.padding(start = 12.dp).weight(1f)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         Spacer(Modifier.height(16.dp))
