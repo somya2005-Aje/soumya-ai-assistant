@@ -98,7 +98,7 @@ class ToolExecutor(
             "display" -> Settings.ACTION_DISPLAY_SETTINGS
             "sound" -> Settings.ACTION_SOUND_SETTINGS
             "location" -> Settings.ACTION_LOCATION_SOURCE_SETTINGS
-            "battery" -> Settings.ACTION_POWER_USAGE_SUMMARY
+            "battery" -> "android.intent.action.POWER_USAGE_SUMMARY" // Settings.ACTION_POWER_USAGE_SUMMARY is @hide; use the literal action
             "apps", "applications" -> Settings.ACTION_APPLICATION_SETTINGS
             "notifications" -> Settings.ACTION_APP_NOTIFICATION_SETTINGS
             else -> Settings.ACTION_SETTINGS
