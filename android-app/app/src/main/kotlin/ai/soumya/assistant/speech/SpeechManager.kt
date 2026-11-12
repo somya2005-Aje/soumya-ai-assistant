@@ -75,7 +75,7 @@ class SpeechManager(
         initTts {
             if (!ttsReady) return@initTts
             applyLanguage()
-            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "soumya-${System.currentTimeMillis()}")
+            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "assistant-${System.currentTimeMillis()}")
         }
     }
 

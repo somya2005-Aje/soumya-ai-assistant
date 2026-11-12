@@ -69,7 +69,34 @@ fun SettingsScreen(
     var keyVisible by remember { mutableStateOf(false) }
     var keySaved by remember { mutableStateOf(false) }
     var keyNote by remember { mutableStateOf("") }
+    var keyNoteOk by remember { mutableStateOf(true) }
     var checkingKey by remember { mutableStateOf(false) }
+
+    /** Runs the silent Gemini check for [key] and shows the SPECIFIC result. */
+    fun runKeyCheck(key: String) {
+        checkingKey = true
+        keyNote = ""
+        scope.launch(Dispatchers.IO) {
+            val client = GeminiClient(key)
+            val result = client.testConnection()
+            withContext(Dispatchers.Main) {
+                checkingKey = false
+                result.onSuccess { model ->
+                    prefs.keyVerified = true
+                    keyNoteOk = true
+                    keyNote = "Connected ✓ (model: $model)"
+                }.onFailure {
+                    val failure = it as? GeminiClient.GeminiFailure
+                    if (failure?.kind == GeminiClient.FailureKind.INVALID_KEY ||
+                        failure?.kind == GeminiClient.FailureKind.PERMISSION) {
+                        prefs.keyVerified = false
+                    }
+                    keyNoteOk = false
+                    keyNote = it.message ?: "Key check nahi ho payi, phir try karo."
+                }
+            }
+        }
+    }
 
     Column(
         Modifier.fillMaxSize().background(Color(0xFF070B1A)).padding(16.dp)
@@ -83,10 +110,10 @@ fun SettingsScreen(
         }
 
         Section("Character")
-        RadioRow("Male Soumya", character == Prefs.Character.MALE) {
+        RadioRow("Jarvis (Male)", character == Prefs.Character.MALE) {
             character = Prefs.Character.MALE; prefs.character = Prefs.Character.MALE
         }
-        RadioRow("Female Soumya", character == Prefs.Character.FEMALE) {
+        RadioRow("Alexa (Female)", character == Prefs.Character.FEMALE) {
             character = Prefs.Character.FEMALE; prefs.character = Prefs.Character.FEMALE
         }
 
@@ -108,7 +135,7 @@ fun SettingsScreen(
             prefs.backgroundModeEnabled = enabled
             if (enabled) AssistantService.start(context) else AssistantService.stop(context)
         }
-        SwitchRow("Wake word — \"Hey Soumya\"", wakeWord) { enabled ->
+        SwitchRow("Wake word — \"${character.wakePhrase}\"", wakeWord) { enabled ->
             wakeWord = enabled
             prefs.wakeWordEnabled = enabled
             if (enabled && !backgroundMode) {
@@ -153,34 +180,42 @@ fun SettingsScreen(
                 enabled = !checkingKey,
                 onClick = {
                     // Any non-empty key is accepted — no strict format check.
-                    // The key is saved first, then silently verified in the
-                    // background; a failed check only shows a friendly note.
-                    val trimmed = apiKey.trim()
-                    if (trimmed.isBlank()) {
+                    // Quotes/whitespace are stripped, the key is saved first,
+                    // then silently verified; a failed check shows the
+                    // SPECIFIC diagnosis (wrong key / no permission / quota /
+                    // no internet), never a generic line.
+                    val cleaned = Prefs.cleanApiKey(apiKey)
+                    if (cleaned.isBlank()) {
+                        keyNoteOk = false
                         keyNote = "Pehle key paste karo."
                         return@Button
                     }
-                    prefs.geminiApiKey = trimmed
+                    prefs.geminiApiKey = cleaned
+                    apiKey = cleaned
                     keySaved = true
-                    keyNote = ""
-                    checkingKey = true
-                    scope.launch(Dispatchers.IO) {
-                        val ok = try {
-                            GeminiClient(trimmed)
-                                .generate("Reply with just OK.", emptyList(), "hi")
-                                .isSuccess
-                        } catch (_: Exception) {
-                            false
-                        }
-                        withContext(Dispatchers.Main) {
-                            checkingKey = false
-                            keyNote = if (ok) "Key save ho gayi ✓" else "Key check nahi ho payi, phir try karo."
-                        }
-                    }
+                    runKeyCheck(cleaned)
                 }
             ) { Text(if (checkingKey) "Checking…" else "Save key") }
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = { apiKey = ""; prefs.geminiApiKey = null; keySaved = false; keyNote = "" }) {
+            OutlinedButton(
+                enabled = !checkingKey,
+                onClick = {
+                    // Test the key in the field on demand — saves it first
+                    // so Home's verified chip reflects the result.
+                    val cleaned = Prefs.cleanApiKey(apiKey)
+                    if (cleaned.isBlank()) {
+                        keyNoteOk = false
+                        keyNote = "Pehle key paste karo."
+                        return@OutlinedButton
+                    }
+                    prefs.geminiApiKey = cleaned
+                    apiKey = cleaned
+                    keySaved = true
+                    runKeyCheck(cleaned)
+                }
+            ) { Text("Test connection") }
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = { apiKey = ""; prefs.geminiApiKey = null; prefs.keyVerified = false; keySaved = false; keyNote = "" }) {
                 Text("Clear key")
             }
             Spacer(Modifier.height(8.dp))
@@ -189,7 +224,11 @@ fun SettingsScreen(
             }
         }
         if (keySaved) Text("Key saved securely.", color = Color(0xFF38E6B5), fontSize = 13.sp)
-        if (keyNote.isNotBlank()) Text(keyNote, color = Color(0xFF38E6B5), fontSize = 13.sp)
+        if (keyNote.isNotBlank()) Text(
+            keyNote,
+            color = if (keyNoteOk) Color(0xFF38E6B5) else Color(0xFFFFB020),
+            fontSize = 13.sp
+        )
 
         Section("Privacy & permissions")
         Text(
@@ -240,16 +279,16 @@ fun AboutScreen(onBack: () -> Unit) {
     val statuses = listOf(
         "AI chat (Gemini, with function calling)" to "Implemented — needs your free API key in Settings",
         "Permission-gated tools (calls, gallery, reminders…)" to "Implemented — bina permission ke koi kaam nahi, AI Hindi me permission maangti hai",
-        "Home talk button (big round mic)" to "Implemented — tap karke bolo, Soumya bolke jawab degi",
+        "Home talk button (big round mic)" to "Implemented — tap karke bolo, tumhara companion bolke jawab dega",
         "Open any installed app (voice + list)" to "Implemented — phone ke saare launchable apps",
         "Voice chat (STT + TTS, Hindi/English/Hinglish)" to "Implemented",
-        "Male / Female Soumya characters" to "Implemented — animated portraits (v1)",
+        "Jarvis / Alexa characters" to "Implemented — animated portraits (v1)",
         "Real-time 3D human + full lip-sync" to "Pending (v2) — needs a Unity project; NOT in v1",
         "Long-term memory (Room)" to "Implemented — secrets are never saved",
         "Open apps / settings / battery / device info" to "Implemented",
         "Reminders (exact alarms + WorkManager)" to "Implemented — permission-dependent",
         "Background assistant (foreground service)" to "Implemented — Pause/Resume/Disable",
-        "Wake word \"Hey Soumya\"" to "Implemented (recognition loop) — platform-restricted on lock screen",
+        "Wake word \"Hey Jarvis / Hey Alexa\"" to "Implemented (recognition loop) — platform-restricted on lock screen",
         "Notification reading & summary" to "Permission-dependent — grant Notification Access",
         "Accessibility automation" to "Permission-dependent — optional, disabled by default",
         "File browse / create folder / rename" to "Implemented via system picker + app storage",
@@ -265,7 +304,7 @@ fun AboutScreen(onBack: () -> Unit) {
             }
             Text("About SOUMYA AI", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
         }
-        Text("SOUMYA AI Assistant v1.1.0 — \"Your Personal AI. Your World.\"", fontSize = 14.sp, color = Color.White)
+        Text("SOUMYA AI Assistant v1.1.1 — \"Your Personal AI. Your World.\"", fontSize = 14.sp, color = Color.White)
         Spacer(Modifier.height(12.dp))
         Text(
             "Honest limits in v1:\n\n" +

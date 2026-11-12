@@ -101,8 +101,8 @@ class ChatEngine(
             "en" -> "Reply in English."
             else -> "Reply in natural Hinglish (Hindi + English mix), the way people speak in India."
         }
-        val character = if (prefs.character == Prefs.Character.MALE) "Male Soumya" else "Female Soumya"
-        return "You are $character, a friendly personal AI assistant called SOUMYA AI. " +
+        val name = prefs.character.displayName
+        return "You are $name, a friendly personal AI assistant in the SOUMYA AI app. " +
             "Be warm, helpful and concise. $lang " +
             "Use the provided tools for device actions and verify results before claiming success. " +
             "Never claim an action succeeded unless the tool reported success. " +
@@ -171,10 +171,19 @@ class ChatEngine(
             }
         }
         result.onSuccess { (text, blocked) ->
+            // A real Gemini reply proves the stored key works.
+            prefs.keyVerified = true
             if (blocked != null) pendingPermission = blocked
             reply(text, onState)
         }
             .onFailure {
+                // Auth failures (bad key / no permission) invalidate the
+                // stored key's verification; other failures leave it alone.
+                val failure = it as? GeminiClient.GeminiFailure
+                if (failure?.kind == GeminiClient.FailureKind.INVALID_KEY ||
+                    failure?.kind == GeminiClient.FailureKind.PERMISSION) {
+                    prefs.keyVerified = false
+                }
                 // Friendly Hindi only — GeminiClient never returns raw codes or
                 // exception text. On-device commands keep working regardless.
                 val friendly = it.message
@@ -251,7 +260,7 @@ fun ChatScreen(
             IconButton(onClick = onBack) {
                 Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
             }
-            Text("Chat with Soumya", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.weight(1f))
+            Text("Chat with ${prefs.character.displayName}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.weight(1f))
             IconButton(onClick = {
                 if (prefs.speakReplies) { prefs.speakReplies = false; speech.stopSpeaking() }
                 else prefs.speakReplies = true
@@ -340,7 +349,7 @@ fun ChatScreen(
             OutlinedTextField(
                 value = input,
                 onValueChange = { input = it },
-                placeholder = { Text("Message Soumya…") },
+                placeholder = { Text("Message ${prefs.character.displayName}…") },
                 modifier = Modifier.weight(1f),
                 singleLine = false,
                 maxLines = 4

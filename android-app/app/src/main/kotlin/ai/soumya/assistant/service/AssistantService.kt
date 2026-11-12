@@ -28,8 +28,9 @@ import kotlinx.coroutines.launch
  * Background Assistant (foreground service).
  *
  * Wake word: honest SpeechRecognizer-based listening loop — when enabled, the
- * service listens in short windows and matches "hey soumya" / "soumya" /
- * "hello soumya" in recognised text, then handles the following command.
+ * service listens in short windows and matches "hey jarvis" / "jarvis" /
+ * "hey alexa" / "alexa" (plus the old "hey soumya" / "soumya" phrases) in
+ * recognised text, then handles the following command.
  * Continuous always-on hotword detection is platform/manufacturer-limited:
  * Android does not offer a system hotword API to third-party apps, so this
  * uses repeated recognition sessions while the service is running. The
@@ -100,13 +101,17 @@ class AssistantService : Service() {
         speech.onSpeechResult = { heard ->
             listeningLoopActive = false
             val lower = heard.lowercase()
-            val wakeWords = listOf("hey soumya", "hello soumya", "soumya")
+            // Longer phrases first so "hey jarvis" wins over bare "jarvis".
+            val wakeWords = listOf(
+                "hey jarvis", "jarvis", "hey alexa", "alexa",
+                "hey soumya", "hello soumya", "soumya"
+            )
             val hit = wakeWords.firstOrNull { lower.contains(it) }
             if (hit != null) {
                 val command = heard.substringAfter(hit, "").trim()
                 if (command.isNotEmpty()) handleHeardCommand(command) else {
                     speech.speak("Yes? How can I help?")
-                    updateNotification("Listening… say a command after \"Hey Soumya\"")
+                    updateNotification("Listening… say a command after \"${prefs.character.wakePhrase}\"")
                 }
             }
             // No wake word: keep the loop going silently.
@@ -171,7 +176,7 @@ class AssistantService : Service() {
             .build()
     }
 
-    private fun updateNotification(text: String = if (paused) "Paused — tap Resume to listen again" else "Listening for \"Hey Soumya\"") {
+    private fun updateNotification(text: String = if (paused) "Paused — tap Resume to listen again" else "Listening for \"${prefs.character.wakePhrase}\"") {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.notify(NOTIFICATION_ID, buildNotification(text))
     }

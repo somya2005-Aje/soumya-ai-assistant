@@ -106,21 +106,21 @@ fun CharacterSelectScreen(prefs: Prefs, onSelected: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(Modifier.height(24.dp))
-        Text("Choose your Soumya", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        Text("Choose your companion", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
         Text(
             "Pick who you want to talk to. You can switch anytime in Settings.",
             fontSize = 14.sp, color = TextSecondary, modifier = Modifier.padding(top = 6.dp)
         )
         Spacer(Modifier.height(28.dp))
         CharacterCard(
-            name = "Soumya — Male",
+            name = "JARVIS",
             desc = "Friendly, intelligent, caring and professional. Male voice.",
             drawable = R.drawable.soumya_male,
             onClick = { prefs.character = Prefs.Character.MALE; prefs.characterChosen = true; onSelected() }
         )
         Spacer(Modifier.height(16.dp))
         CharacterCard(
-            name = "Soumya — Female",
+            name = "ALEXA",
             desc = "Caring, intelligent, funny and emotionally aware. Female voice.",
             drawable = R.drawable.soumya_female,
             onClick = { prefs.character = Prefs.Character.FEMALE; prefs.characterChosen = true; onSelected() }
@@ -160,6 +160,7 @@ fun HomeScreen(
     prefs: Prefs,
     voiceState: VoiceState,
     hasGeminiKey: Boolean,
+    keyVerified: Boolean,
     recentMemories: List<MemoryEntity>,
     engine: ChatEngine,
     onMic: () -> Unit,
@@ -177,7 +178,7 @@ fun HomeScreen(
         else -> "Good night"
     }
     // Last spoken reply, shown right under the mic button so the user sees
-    // what Soumya answered without opening Chat.
+    // what their companion answered without opening Chat.
     val lastReply = engine.messages.lastOrNull { it.role == "model" }?.text.orEmpty()
     Column(
         modifier = Modifier.fillMaxSize().background(Color(0xFF070B1A))
@@ -200,9 +201,15 @@ fun HomeScreen(
             portraitSize = 150.dp
         )
         Spacer(Modifier.height(4.dp))
+        // Honest key status: "connected" only after a real Gemini call
+        // succeeded with this key; a stored-but-unverified key says so.
         StatusChip(
-            if (hasGeminiKey) "Gemini connected ✓" else "On-device mode — key Settings me daalo",
-            hasGeminiKey
+            when {
+                keyVerified -> "Gemini connected ✓"
+                hasGeminiKey -> "Key saved — abhi check nahi hui"
+                else -> "On-device mode — key Settings me daalo"
+            },
+            keyVerified
         )
         Spacer(Modifier.height(20.dp))
         // HERO: the big round talk button — the most prominent element on Home.
@@ -266,7 +273,7 @@ fun HomeScreen(
             listOf(
                 Triple("Open YouTube", Icons.Filled.PlayArrow) { onQuickAction("YouTube") },
                 Triple("Battery status", Icons.Filled.Notifications) { onQuickAction("__battery__") },
-                Triple("Chat with Soumya", Icons.Filled.Chat) { onOpenChat("") },
+                Triple("Chat with ${prefs.character.displayName}", Icons.Filled.Chat) { onOpenChat("") },
                 Triple("Memory Center", Icons.Filled.Settings) { onNavigate("memory") },
                 Triple("Automation Center", Icons.Filled.PlayArrow) { onNavigate("automation") },
                 Triple("Permissions", Icons.Filled.Settings) { onNavigate("permissions") }

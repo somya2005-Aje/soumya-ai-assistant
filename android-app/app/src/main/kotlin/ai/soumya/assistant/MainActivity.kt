@@ -64,6 +64,7 @@ class MainActivity : ComponentActivity() {
                 var quickResult by remember { mutableStateOf("") }
                 var recentMemories by remember { mutableStateOf(emptyList<ai.soumya.assistant.data.MemoryEntity>()) }
                 var hasKey by remember { mutableStateOf(prefs.hasGeminiKey()) }
+                var keyVerified by remember { mutableStateOf(prefs.keyVerified) }
 
                 val engine = remember {
                     ChatEngine(prefs, memoryRepo, executor, local, speech)
@@ -73,6 +74,7 @@ class MainActivity : ComponentActivity() {
                     scope.launch {
                         recentMemories = withContext(Dispatchers.IO) { memoryRepo.all().take(3) }
                         hasKey = prefs.hasGeminiKey()
+                        keyVerified = prefs.keyVerified
                     }
                 }
 
@@ -148,6 +150,7 @@ class MainActivity : ComponentActivity() {
                             prefs = prefs,
                             voiceState = voiceState,
                             hasGeminiKey = hasKey,
+                            keyVerified = keyVerified,
                             recentMemories = recentMemories,
                             engine = engine,
                             onMic = ::startVoiceInput,

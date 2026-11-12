@@ -29,7 +29,17 @@ class Prefs(context: Context) {
         )
     }
 
-    enum class Character { MALE, FEMALE }
+    /**
+     * The two companion characters. Internal enum stays MALE/FEMALE; the
+     * user-visible names are JARVIS (male) and ALEXA (female) — the app
+     * itself is still "SOUMYA AI ASSISTANT".
+     */
+    enum class Character(val displayName: String, val wakePhrase: String) {
+        MALE("Jarvis", "Hey Jarvis"),
+        FEMALE("Alexa", "Hey Alexa")
+    }
+
+    val companionName: String get() = character.displayName
 
     var character: Character
         get() = if (settings.getString("character", "MALE") == "FEMALE") Character.FEMALE else Character.MALE
@@ -67,9 +77,33 @@ class Prefs(context: Context) {
     var geminiApiKey: String?
         get() = secure.getString("gemini_api_key", null)?.takeIf { it.isNotBlank() }
         set(value) {
-            if (value.isNullOrBlank()) secure.edit().remove("gemini_api_key").apply()
-            else secure.edit().putString("gemini_api_key", value.trim()).apply()
+            val cleaned = cleanApiKey(value ?: "")
+            val changed = cleaned != (geminiApiKey ?: "")
+            if (cleaned.isBlank()) secure.edit().remove("gemini_api_key").apply()
+            else secure.edit().putString("gemini_api_key", cleaned).apply()
+            // Any key change invalidates the previous verification — the new
+            // key has to prove itself with a real successful Gemini call.
+            if (changed) keyVerified = false
         }
+
+    /**
+     * True only after a real generateContent call succeeded with the
+     * currently stored key. Set by ChatEngine / the Settings key check;
+     * cleared whenever the key changes/is cleared or a call fails with
+     * 400/401/403. Home shows "Gemini connected ✓" only when this is true.
+     */
+    var keyVerified: Boolean
+        get() = settings.getBoolean("key_verified", false)
+        set(value) { settings.edit().putBoolean("key_verified", value).apply() }
+
+    companion object {
+        /**
+         * Users sometimes paste a key wrapped in quotes ("AIza...").
+         * Strip surrounding whitespace AND surrounding quote characters.
+         */
+        fun cleanApiKey(raw: String): String =
+            raw.trim().trim('"').trim('\'').trim()
+    }
 
     /** True when the user has saved their own key in Settings. */
     fun hasUserKey(): Boolean = geminiApiKey != null

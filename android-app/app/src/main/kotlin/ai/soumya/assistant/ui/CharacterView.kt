@@ -42,7 +42,7 @@ import ai.soumya.assistant.ui.theme.TextSecondary
 import ai.soumya.assistant.ui.theme.Violet500
 
 /**
- * Animated Soumya portrait (v1 honest animation):
+ * Animated companion portrait (v1 honest animation):
  * generated portrait + Compose-driven idle breathing (scale), periodic blink
  * overlay, listening waveform bars, thinking dots and a speaking mouth
  * overlay. True real-time 3D with lip-sync is NOT in v1 — see About /
@@ -68,7 +68,7 @@ fun CharacterView(
         label = "breathe"
     )
     val portrait = if (character == Prefs.Character.MALE) R.drawable.soumya_male else R.drawable.soumya_female
-    val name = if (character == Prefs.Character.MALE) "Soumya" else "Soumya"
+    val name = character.displayName
 
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Box(contentAlignment = Alignment.Center) {

@@ -35,7 +35,7 @@ class LocalCommands(
             return executor.makeCall(koCallMatch).message
         }
 
-        // Open app: "open YouTube" / "youtube kholo" / "soumya, chrome kholo"
+        // Open app: "open YouTube" / "youtube kholo" / "jarvis, chrome kholo"
         val openMatch = Regex("(?i)(?:open|kholo|khol|launch|start)\\s+(.+)", RegexOption.IGNORE_CASE)
             .find(t)?.groupValues?.getOrNull(1)?.trim()
         if (openMatch != null) {

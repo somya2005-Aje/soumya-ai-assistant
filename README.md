@@ -2,7 +2,7 @@
 
 **"Your Personal AI. Your World."**
 
-A production Android personal AI assistant: Male/Female Soumya characters, Gemini AI brain
+A production Android personal AI assistant: JARVIS / ALEXA characters, Gemini AI brain
 with function calling, Hindi/English/Hinglish voice chat, long-term memory (Room),
 phone control & automation, background assistant with wake word, notification reading,
 reminders, and a full permissions dashboard.
@@ -34,7 +34,7 @@ recent memories) → Chat → Memory Center → Automation Center → Permission
   Compose-driven animation (breathing, speaking overlay, expression/mood states).
 - **Always-on lock-screen wake word is platform-limited.** Android offers third-party
   apps no system hotword API; manufacturers restrict background microphone use. The wake
-  word ("Hey Soumya") works via an on-device recognition loop while the foreground
+  word ("Hey Jarvis / Hey Alexa") works via an on-device recognition loop while the foreground
   background service runs; on some phones only with the screen on.
 - An ordinary app cannot silently control every setting or third-party app. Every action
   goes through official Android APIs/intents, and the app reports verified success or
@@ -64,7 +64,7 @@ android-app/                  Android Studio project (Gradle 8.7, AGP 8.5.2, Kot
                               NotificationListenerService, AccessibilityService,
                               reminders (AlarmManager + WorkManager)
       ui/                     Theme, animated CharacterView, all screens
-    res/drawable/             Logo + Male/Female Soumya portraits (webp)
+    res/drawable/             Logo + JARVIS / ALEXA portraits (webp)
 .github/workflows/android.yml  CI: JDK 17 → assembleDebug → APK artifact `app-debug`
 ```
 
