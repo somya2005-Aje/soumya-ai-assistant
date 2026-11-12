@@ -324,5 +324,6 @@ class GeminiClient(private val apiKey: String) {
         /** Backwards-compatible helper for callers that only need a message. */
         fun friendlyMessageForCode(code: Int): String =
             failureForError(code, "").message
+                ?: "AI se jawab nahi mila, phir try karo."
     }
 }
