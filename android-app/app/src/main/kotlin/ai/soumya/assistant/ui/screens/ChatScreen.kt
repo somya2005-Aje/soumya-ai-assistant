@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import ai.soumya.assistant.ai.GeminiClient
+import ai.soumya.assistant.ai.GroqClient
 import ai.soumya.assistant.ai.LocalCommands
 import ai.soumya.assistant.ai.PermissionGate
 import ai.soumya.assistant.ai.ToolExecutor
@@ -72,10 +73,10 @@ import org.json.JSONObject
 data class ChatMessage(val role: String, val text: String, val isError: Boolean = false)
 
 const val GEMINI_SETUP_GUIDE = "Abhi main on-device mode me hoon — bina key ke bhi kaam kar sakta hoon.\n\n" +
-    "Full AI chat ke liye:\n" +
-    "1. Browser me Google AI Studio kholo (aistudio.google.com).\n" +
-    "2. Free API key banao.\n" +
-    "3. Settings → Gemini API key me paste karo.\n\n" +
+    "Full AI chat ke liye ek free key chahiye (koi ek kaafi hai):\n" +
+    "• Gemini: Google AI Studio (aistudio.google.com) se key banao.\n" +
+    "• Groq: console.groq.com se free key banao (koi card nahi chahiye).\n" +
+    "Settings → API keys me paste karo, ya Home se LIA Setup Wizard kholo.\n\n" +
     "Tab tak try karo: \"YouTube kholo\", \"battery status\", ya \"remember that I prefer Hindi\"."
 
 class ChatEngine(
@@ -95,6 +96,69 @@ class ChatEngine(
      */
     var pendingPermission by mutableStateOf<String?>(null)
 
+    /** Provider ("gemini" | "groq") that served the last successful AI turn. */
+    var lastProvider: String? = null
+        private set
+
+    /** Providers attempted on the last AI turn (for verified-flag cleanup). */
+    private var attemptedProviders: List<String> = emptyList()
+
+    /**
+     * One AI turn through the chosen provider(s). Provider setting:
+     * "auto" = Gemini first, on any failure fall back to Groq (if its key
+     * exists); "gemini"/"groq" = that provider only. A provider is only
+     * tried when its key exists. Returns the raw result; the caller maps
+     * failures to friendly Hindi (clients never return raw errors).
+     */
+    private suspend fun aiTurn(
+        systemPrompt: String,
+        history: List<Pair<String, String>>,
+        userMessage: String,
+        functionResponse: JSONObject? = null,
+        functionName: String? = null
+    ): Result<GeminiClient.GeminiResult> {
+        val provider = prefs.aiProvider
+        val candidates = mutableListOf<Pair<String, suspend () -> Result<GeminiClient.GeminiResult>>>()
+        if (provider == "gemini" || provider == "auto") {
+            prefs.effectiveGeminiKey()?.let { key ->
+                candidates.add("gemini" to {
+                    GeminiClient(key, prefs.geminiModel)
+                        .generate(systemPrompt, history, userMessage, functionResponse, functionName)
+                })
+            }
+        }
+        if (provider == "groq" || provider == "auto") {
+            prefs.effectiveGroqKey()?.let { key ->
+                candidates.add("groq" to {
+                    GroqClient(key, prefs.groqModel)
+                        .generate(systemPrompt, history, userMessage, functionResponse, functionName)
+                })
+            }
+        }
+        attemptedProviders = candidates.map { it.first }
+        if (candidates.isEmpty()) {
+            // E.g. provider is "Groq only" but only a Gemini key is saved.
+            val hint = when (provider) {
+                "gemini" -> "Gemini key nahi hai — Settings me Gemini key daalo ya provider Auto karo."
+                "groq" -> "Groq key nahi hai — Settings me Groq key daalo ya provider Auto karo."
+                else -> "Koi AI key nahi hai — Settings me Gemini ya Groq key daalo."
+            }
+            return Result.failure(Exception(hint))
+        }
+        var lastError: Throwable? = null
+        for ((name, call) in candidates) {
+            val result = call()
+            if (result.isSuccess) {
+                lastProvider = name
+                return result
+            }
+            lastError = result.exceptionOrNull()
+        }
+        return Result.failure(
+            lastError ?: Exception("AI se jawab nahi mila, phir try karo.")
+        )
+    }
+
     private fun systemPrompt(memories: List<String>): String {
         val lang = when (prefs.language) {
             "hi" -> "Reply in Hindi (Devanagari is fine)."
@@ -103,7 +167,7 @@ class ChatEngine(
         }
         val name = prefs.character.displayName
         return "You are $name, a friendly personal AI assistant in the SOUMYA AI app. " +
-            "Be warm, helpful and concise. $lang " +
+            "Be warm, helpful and concise. ${prefs.personalityPrompt()} $lang " +
             "Use the provided tools for device actions and verify results before claiming success. " +
             "Never claim an action succeeded unless the tool reported success. " +
             "Never ask for or store passwords, OTPs or secrets. " +
@@ -130,10 +194,12 @@ class ChatEngine(
             return
         }
 
-        // Key resolution: user's own Settings key first, then a baked-in
-        // build-time key (normally empty — never hardcoded).
-        val key = prefs.effectiveGeminiKey()
-        if (key == null) {
+        // Key resolution: at least one provider key must exist — the user's
+        // own Settings key(s) first (Gemini, then Groq). No key = on-device
+        // guide; the AI turn itself picks the provider (auto = Gemini,
+        // falling back to Groq).
+        val hasAnyKey = prefs.hasGeminiKey() || prefs.hasGroqKey()
+        if (!hasAnyKey) {
             reply(GEMINI_SETUP_GUIDE, onState)
             busy = false
             return
@@ -142,10 +208,9 @@ class ChatEngine(
         val result = withContext(Dispatchers.IO) {
             runCatching {
                 val memories = memoryRepo.all().take(5).map { "${it.title}: ${it.content}" }
-                val client = GeminiClient(key)
                 val history = messages.dropLast(1).takeLast(10)
                     .map { it.role to it.text }
-                val first = client.generate(systemPrompt(memories), history, text)
+                val first = aiTurn(systemPrompt(memories), history, text)
                     .getOrElse { throw it }
                 val call = first.functionCall
                 if (call == null) {
@@ -154,13 +219,13 @@ class ChatEngine(
                     val outcome = executor.execute(call.name, call.args)
                     if (outcome.needsPermission != null) {
                         // BLOCKED: reply with the Hindi ask directly — no
-                        // second Gemini call, and never claim success.
+                        // second AI call, and never claim success.
                         outcome.message to outcome.needsPermission
                     } else {
                         val toolJson = JSONObject()
                             .put("success", outcome.success)
                             .put("result", outcome.message)
-                        val second = client.generate(
+                        val second = aiTurn(
                             systemPrompt(memories), history, text,
                             functionResponse = toolJson, functionName = call.name
                         ).getOrElse { throw it }
@@ -171,20 +236,28 @@ class ChatEngine(
             }
         }
         result.onSuccess { (text, blocked) ->
-            // A real Gemini reply proves the stored key works.
-            prefs.keyVerified = true
+            // A real AI reply proves the stored key works (for the provider
+            // that actually answered).
+            if (lastProvider == "groq") prefs.groqKeyVerified = true
+            else prefs.keyVerified = true
             if (blocked != null) pendingPermission = blocked
             reply(text, onState)
         }
             .onFailure {
                 // Auth failures (bad key / no permission) invalidate the
-                // stored key's verification; other failures leave it alone.
-                val failure = it as? GeminiClient.GeminiFailure
-                if (failure?.kind == GeminiClient.FailureKind.INVALID_KEY ||
-                    failure?.kind == GeminiClient.FailureKind.PERMISSION) {
-                    prefs.keyVerified = false
+                // attempted providers' verification; other failures leave
+                // them alone. Both clients use GeminiClient.FailureKind.
+                val kind = when (it) {
+                    is GeminiClient.GeminiFailure -> it.kind
+                    is GroqClient.GroqFailure -> it.kind
+                    else -> null
                 }
-                // Friendly Hindi only — GeminiClient never returns raw codes or
+                if (kind == GeminiClient.FailureKind.INVALID_KEY ||
+                    kind == GeminiClient.FailureKind.PERMISSION) {
+                    if ("gemini" in attemptedProviders) prefs.keyVerified = false
+                    if ("groq" in attemptedProviders) prefs.groqKeyVerified = false
+                }
+                // Friendly Hindi only — the clients never return raw codes or
                 // exception text. On-device commands keep working regardless.
                 val friendly = it.message
                     ?: "AI se jawab nahi mila, phir try karo."

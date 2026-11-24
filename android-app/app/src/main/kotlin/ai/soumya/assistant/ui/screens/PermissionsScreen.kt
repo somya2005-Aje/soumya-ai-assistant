@@ -183,6 +183,17 @@ fun PermissionsScreen(onBack: () -> Unit) {
                 else multiLauncher.launch(arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE))
             },
             "Grant"
+        ),
+        PermRow(
+            "Overlay (draw over other apps)", "Show the floating assistant over other apps. Grant in system settings.",
+            if (PermissionGate.isGranted(context, PermissionGate.OVERLAY)) PermState.GRANTED else PermState.NOT_GRANTED,
+            {
+                openSystemSettings(
+                    Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
+                        .setData(Uri.parse("package:${context.packageName}"))
+                )
+            },
+            "Open settings"
         )
     )
 

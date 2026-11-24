@@ -13,8 +13,8 @@ android {
         applicationId = "ai.soumya.assistant"
         minSdk = 29
         targetSdk = 34
-        versionCode = 3
-        versionName = "1.1.1"
+        versionCode = 4
+        versionName = "1.2.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Baked-in key slot (kept for future use). No real key is ever committed:

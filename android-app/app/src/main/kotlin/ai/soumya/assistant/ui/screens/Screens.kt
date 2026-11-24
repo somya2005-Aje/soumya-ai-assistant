@@ -276,7 +276,8 @@ fun HomeScreen(
                 Triple("Chat with ${prefs.character.displayName}", Icons.Filled.Chat) { onOpenChat("") },
                 Triple("Memory Center", Icons.Filled.Settings) { onNavigate("memory") },
                 Triple("Automation Center", Icons.Filled.PlayArrow) { onNavigate("automation") },
-                Triple("Permissions", Icons.Filled.Settings) { onNavigate("permissions") }
+                Triple("Permissions", Icons.Filled.Settings) { onNavigate("permissions") },
+                Triple("LIA Setup Wizard", Icons.Filled.Settings) { onNavigate("setup") }
             )
         )
         Spacer(Modifier.height(16.dp))

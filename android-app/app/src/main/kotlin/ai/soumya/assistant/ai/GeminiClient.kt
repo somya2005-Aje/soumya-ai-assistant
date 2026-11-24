@@ -27,7 +27,10 @@ import java.util.concurrent.TimeUnit
  * ([GeminiFailure.kind]) so callers can react (e.g. clear keyVerified
  * on auth failures).
  */
-class GeminiClient(private val apiKey: String) {
+class GeminiClient(
+    private val apiKey: String,
+    private val preferredModel: String? = null
+) {
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -83,6 +86,17 @@ class GeminiClient(private val apiKey: String) {
             props("query" to "STRING"), emptyList())
         fn("save_memory", "Save a user-approved fact or preference to long-term memory.",
             props("title" to "STRING", "content" to "STRING"), listOf("title", "content"))
+        // v1.2.0 (LIA edition) — honest limits: WhatsApp/Facebook open the
+        // composer with the text prefilled; the USER taps Send/Post. Android
+        // cannot silently auto-send or auto-post, and this app never tries.
+        fn("send_whatsapp_message", "Open WhatsApp chat with a contact (by name) or a phone number, with the message prefilled. The user taps Send — it is NOT sent silently.",
+            props("target" to "STRING", "message" to "STRING"), listOf("target", "message"))
+        fn("play_youtube_music", "Play a song on YouTube Music (falls back to YouTube app, then browser).",
+            props("query" to "STRING"), listOf("query"))
+        fn("play_youtube_video", "Play/search a video on YouTube.",
+            props("query" to "STRING"), listOf("query"))
+        fn("create_facebook_post", "Open the Facebook composer with the post text prefilled. The user taps Post — it is NOT posted silently.",
+            props("text" to "STRING"), listOf("text"))
         return JSONObject().put("functionDeclarations", functions)
     }
 
@@ -187,12 +201,14 @@ class GeminiClient(private val apiKey: String) {
         }
     }
 
-    /** Ordered model candidates: the dynamically resolved model first, then the preference order. */
+    /** Ordered model candidates: the user's chosen model first, then the resolved model, then the preference order. */
     private fun modelCandidates(): List<String> {
         val resolved = resolveModel()
         val ordered = MODEL_PREFERENCE.toMutableList()
         ordered.remove(resolved)
-        return listOf(resolved) + ordered
+        val base = listOf(resolved) + ordered
+        val preferred = preferredModel?.trim().orEmpty()
+        return if (preferred.isBlank()) base else listOf(preferred) + base.filter { it != preferred }
     }
 
     /**

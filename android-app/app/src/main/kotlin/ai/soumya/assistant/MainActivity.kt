@@ -31,6 +31,7 @@ import ai.soumya.assistant.ui.screens.HomeScreen
 import ai.soumya.assistant.ui.screens.MemoryScreen
 import ai.soumya.assistant.ui.screens.PermissionsScreen
 import ai.soumya.assistant.ui.screens.SettingsScreen
+import ai.soumya.assistant.ui.screens.SetupWizardScreen
 import ai.soumya.assistant.ui.screens.SplashScreen
 import ai.soumya.assistant.ui.theme.SoumyaTheme
 import kotlinx.coroutines.Dispatchers
@@ -131,8 +132,27 @@ class MainActivity : ComponentActivity() {
                         SplashScreen(
                             characterChosen = prefs.characterChosen,
                             onDone = { chosen ->
-                                navController.navigate(if (chosen) "home" else "select") {
+                                // v1.2.0: first run goes to the LIA Setup Wizard
+                                // before character select / home.
+                                val dest = when {
+                                    !prefs.setupDone -> "setup"
+                                    chosen -> "home"
+                                    else -> "select"
+                                }
+                                navController.navigate(dest) {
                                     popUpTo("splash") { inclusive = true }
+                                }
+                            }
+                        )
+                    }
+                    composable("setup") {
+                        SetupWizardScreen(
+                            prefs = prefs,
+                            onFinish = {
+                                navController.navigate(
+                                    if (prefs.characterChosen) "home" else "select"
+                                ) {
+                                    popUpTo("setup") { inclusive = true }
                                 }
                             }
                         )
@@ -197,7 +217,8 @@ class MainActivity : ComponentActivity() {
                             prefs = prefs,
                             onBack = { navController.popBackStack() },
                             onOpenAbout = { navController.navigate("about") },
-                            onOpenPermissions = { navController.navigate("permissions") }
+                            onOpenPermissions = { navController.navigate("permissions") },
+                            onOpenSetup = { navController.navigate("setup") }
                         )
                     }
                     composable("about") {

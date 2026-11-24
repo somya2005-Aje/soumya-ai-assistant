@@ -41,6 +41,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ai.soumya.assistant.ai.GeminiClient
+import ai.soumya.assistant.ai.GroqClient
 import ai.soumya.assistant.data.Prefs
 import ai.soumya.assistant.service.AssistantService
 import ai.soumya.assistant.ui.theme.CardBg
@@ -54,7 +55,8 @@ fun SettingsScreen(
     prefs: Prefs,
     onBack: () -> Unit,
     onOpenAbout: () -> Unit,
-    onOpenPermissions: () -> Unit
+    onOpenPermissions: () -> Unit,
+    onOpenSetup: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -71,6 +73,46 @@ fun SettingsScreen(
     var keyNote by remember { mutableStateOf("") }
     var keyNoteOk by remember { mutableStateOf(true) }
     var checkingKey by remember { mutableStateOf(false) }
+
+    // ---- Groq key (v1.2.0) — same save/test/clear/show pattern as Gemini.
+    var groqKey by remember { mutableStateOf(prefs.groqApiKey ?: "") }
+    var groqVisible by remember { mutableStateOf(false) }
+    var groqSaved by remember { mutableStateOf(false) }
+    var groqNote by remember { mutableStateOf("") }
+    var groqNoteOk by remember { mutableStateOf(true) }
+    var groqChecking by remember { mutableStateOf(false) }
+
+    // ---- Provider / model / personality (v1.2.0).
+    var provider by remember { mutableStateOf(prefs.aiProvider) }
+    var personality by remember { mutableStateOf(prefs.personality) }
+    var geminiModel by remember { mutableStateOf(prefs.geminiModel) }
+    var groqModel by remember { mutableStateOf(prefs.groqModel) }
+
+    /** Runs the silent Groq check for [key] and shows the SPECIFIC result. */
+    fun runGroqKeyCheck(key: String) {
+        groqChecking = true
+        groqNote = ""
+        scope.launch(Dispatchers.IO) {
+            val client = GroqClient(key, prefs.groqModel)
+            val result = client.testConnection()
+            withContext(Dispatchers.Main) {
+                groqChecking = false
+                result.onSuccess { model ->
+                    prefs.groqKeyVerified = true
+                    groqNoteOk = true
+                    groqNote = "Connected ✓ (model: $model)"
+                }.onFailure {
+                    val failure = it as? GroqClient.GroqFailure
+                    if (failure?.kind == GeminiClient.FailureKind.INVALID_KEY ||
+                        failure?.kind == GeminiClient.FailureKind.PERMISSION) {
+                        prefs.groqKeyVerified = false
+                    }
+                    groqNoteOk = false
+                    groqNote = it.message ?: "Key check nahi ho payi, phir try karo."
+                }
+            }
+        }
+    }
 
     /** Runs the silent Gemini check for [key] and shows the SPECIFIC result. */
     fun runKeyCheck(key: String) {
@@ -230,6 +272,98 @@ fun SettingsScreen(
             fontSize = 13.sp
         )
 
+        Section("Groq API key (free backup AI)")
+        Text(
+            "Your free key from Groq console (console.groq.com → API Keys). " +
+                "No card needed. Auto mode me Gemini fail ho to Groq se jawab aata hai. " +
+                "Stored encrypted on this device only — never uploaded, never in the app code.",
+            fontSize = 12.sp, color = TextSecondary
+        )
+        if (prefs.hasGroqKey()) {
+            Spacer(Modifier.height(6.dp))
+            Text("Key saved hai ✓ — value kabhi dikhayi nahi jayegi.", color = Color(0xFF38E6B5), fontSize = 13.sp)
+        } else {
+            Spacer(Modifier.height(6.dp))
+            Text("Abhi koi Groq key nahi hai — Gemini key se kaam chal jayega.", fontSize = 13.sp, color = TextSecondary)
+        }
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = groqKey,
+            onValueChange = { groqKey = it; groqSaved = false; groqNote = "" },
+            label = { Text("Groq API key (gsk_…)") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            visualTransformation = if (groqVisible) VisualTransformation.None else PasswordVisualTransformation()
+        )
+        Row {
+            Button(
+                enabled = !groqChecking,
+                onClick = {
+                    val cleaned = Prefs.cleanApiKey(groqKey)
+                    if (cleaned.isBlank()) {
+                        groqNoteOk = false
+                        groqNote = "Pehle key paste karo."
+                        return@Button
+                    }
+                    prefs.groqApiKey = cleaned
+                    groqKey = cleaned
+                    groqSaved = true
+                    runGroqKeyCheck(cleaned)
+                }
+            ) { Text(if (groqChecking) "Checking…" else "Save key") }
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(
+                enabled = !groqChecking,
+                onClick = {
+                    val cleaned = Prefs.cleanApiKey(groqKey)
+                    if (cleaned.isBlank()) {
+                        groqNoteOk = false
+                        groqNote = "Pehle key paste karo."
+                        return@OutlinedButton
+                    }
+                    prefs.groqApiKey = cleaned
+                    groqKey = cleaned
+                    groqSaved = true
+                    runGroqKeyCheck(cleaned)
+                }
+            ) { Text("Test connection") }
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = { groqKey = ""; prefs.groqApiKey = null; prefs.groqKeyVerified = false; groqSaved = false; groqNote = "" }) {
+                Text("Clear key")
+            }
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = { groqVisible = !groqVisible }) {
+                Text(if (groqVisible) "Hide" else "Show")
+            }
+        }
+        if (groqSaved) Text("Key saved securely.", color = Color(0xFF38E6B5), fontSize = 13.sp)
+        if (groqNote.isNotBlank()) Text(
+            groqNote,
+            color = if (groqNoteOk) Color(0xFF38E6B5) else Color(0xFFFFB020),
+            fontSize = 13.sp
+        )
+
+        Section("AI Provider")
+        RadioRow("Auto — Gemini pehle, phir Groq (default)", provider == "auto") { provider = "auto"; prefs.aiProvider = "auto" }
+        RadioRow("Gemini only", provider == "gemini") { provider = "gemini"; prefs.aiProvider = "gemini" }
+        RadioRow("Groq only", provider == "groq") { provider = "groq"; prefs.aiProvider = "groq" }
+
+        Section("Gemini model")
+        GeminiClient.MODEL_PREFERENCE.forEach { model ->
+            RadioRow(model, geminiModel == model) { geminiModel = model; prefs.geminiModel = model }
+        }
+
+        Section("Groq model")
+        GroqClient.MODELS.forEach { model ->
+            RadioRow(model, groqModel == model) { groqModel = model; prefs.groqModel = model }
+        }
+
+        Section("Personality")
+        RadioRow("JARVIS style (default)", personality == "jarvis") { personality = "jarvis"; prefs.personality = "jarvis" }
+        RadioRow("Helpful — seedha, clear", personality == "helpful") { personality = "helpful"; prefs.personality = "helpful" }
+        RadioRow("Funny — halka-phulka, jokes", personality == "funny") { personality = "funny"; prefs.personality = "funny" }
+        RadioRow("Formal — professional", personality == "formal") { personality = "formal"; prefs.personality = "formal" }
+
         Section("Privacy & permissions")
         Text(
             "Memories never include passwords or OTPs. Conversations stay on this device. " +
@@ -239,6 +373,10 @@ fun SettingsScreen(
         Spacer(Modifier.height(8.dp))
         Button(onClick = onOpenPermissions, modifier = Modifier.fillMaxWidth()) { Text("Open Permissions dashboard") }
         Spacer(Modifier.height(8.dp))
+        if (onOpenSetup != null) {
+            Button(onClick = onOpenSetup, modifier = Modifier.fillMaxWidth()) { Text("LIA Setup Wizard kholo") }
+            Spacer(Modifier.height(8.dp))
+        }
         Button(onClick = onOpenAbout, modifier = Modifier.fillMaxWidth()) { Text("About & feature status") }
         Spacer(Modifier.height(24.dp))
     }
@@ -277,7 +415,16 @@ fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
 @Composable
 fun AboutScreen(onBack: () -> Unit) {
     val statuses = listOf(
-        "AI chat (Gemini, with function calling)" to "Implemented — needs your free API key in Settings",
+        "AI chat (Gemini + Groq, with function calling)" to "Implemented — free key Settings me daalo; Auto mode Gemini pehle, phir Groq",
+        "Groq AI (llama-3.3-70b, free tier)" to "Implemented — console.groq.com se free key, test connection ke saath",
+        "LIA Setup Wizard (Play Protect, Restricted Settings, Accessibility, Overlay, keys, personality)" to "Implemented — pehli baar khud khulta hai, Home/Settings se dobara kholo",
+        "Overlay / Draw over other apps permission" to "Implemented — Permissions dashboard + Setup Wizard se allow karo",
+        "WhatsApp message (chat khulta hai, message prefilled)" to "Implemented — user khud Send dabata hai; Android silently send nahi kar sakta",
+        "YouTube Music play (YouTube Music → YouTube → browser)" to "Implemented — jo khula, wahi bataya jata hai",
+        "YouTube video play" to "Implemented — YouTube app ya browser me search khulta hai",
+        "Facebook post (composer khulta hai, text prefilled)" to "Implemented — user khud Post dabata hai; silent auto-post nahi hota",
+        "Personality presets (JARVIS / Helpful / Funny / Formal)" to "Implemented — Settings ya Setup Wizard se chuno",
+        "Provider & model picker (Gemini / Groq, model choice)" to "Implemented",
         "Permission-gated tools (calls, gallery, reminders…)" to "Implemented — bina permission ke koi kaam nahi, AI Hindi me permission maangti hai",
         "Home talk button (big round mic)" to "Implemented — tap karke bolo, tumhara companion bolke jawab dega",
         "Open any installed app (voice + list)" to "Implemented — phone ke saare launchable apps",
@@ -304,7 +451,7 @@ fun AboutScreen(onBack: () -> Unit) {
             }
             Text("About SOUMYA AI", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
         }
-        Text("SOUMYA AI Assistant v1.1.1 — \"Your Personal AI. Your World.\"", fontSize = 14.sp, color = Color.White)
+        Text("SOUMYA AI Assistant v1.2.0 — \"Your Personal AI. Your World.\" (LIA edition)", fontSize = 14.sp, color = Color.White)
         Spacer(Modifier.height(12.dp))
         Text(
             "Honest limits in v1:\n\n" +
@@ -315,7 +462,10 @@ fun AboutScreen(onBack: () -> Unit) {
                 "system hotword API, and manufacturers restrict background microphone use. The wake word " +
                 "works while the background service runs; on some phones only with the screen on.\n\n" +
                 "• An ordinary app cannot silently control every setting or third-party app — actions go " +
-                "through official Android APIs and intents, and the app reports verified success or failure.",
+                "through official Android APIs and intents, and the app reports verified success or failure.\n\n" +
+                "• WhatsApp aur Facebook par message/post CHUP-CHAAP nahi bheja ja sakta — app sirf composer " +
+                "kholti hai jisme text pehle se likha hota hai; Send/Post tumhe khud dabana hota hai. " +
+                "Ye Android ki limit hai, app ki kami nahi.",
             fontSize = 14.sp, color = TextSecondary
         )
         Spacer(Modifier.height(16.dp))

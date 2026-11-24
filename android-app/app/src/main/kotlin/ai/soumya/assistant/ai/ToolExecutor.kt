@@ -17,6 +17,7 @@ import android.provider.Settings
 import ai.soumya.assistant.data.MemoryRepository
 import ai.soumya.assistant.service.ReminderReceiver
 import org.json.JSONObject
+import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -136,6 +137,12 @@ class ToolExecutor(
                 )
                 "make_call" -> makeCall(args.optString("target"))
                 "list_recent_photos" -> listRecentPhotos(args.optDouble("count", 5.0).toInt())
+                "send_whatsapp_message" -> sendWhatsappMessage(
+                    args.optString("target"), args.optString("message")
+                )
+                "play_youtube_music" -> playYoutubeMusic(args.optString("query"))
+                "play_youtube_video" -> playYoutubeVideo(args.optString("query"))
+                "create_facebook_post" -> createFacebookPost(args.optString("text"))
                 "search_memory" -> {
                     val hits = memoryRepo.search(args.optString("query"))
                     ToolOutcome(true, if (hits.isEmpty()) "No saved memories matched."
@@ -398,6 +405,190 @@ class ToolExecutor(
             ToolOutcome(true, "Reminder set for \"$text\" in ${minutesFromNow.toInt()} minutes.")
         } catch (_: SecurityException) {
             blocked(PermissionGate.info(PermissionGate.ALARMS))
+        }
+    }
+
+    // ---- v1.2.0 (LIA edition) --------------------------------------------
+    // HONEST DESIGN (hard rule): Android lets an ordinary app OPEN another
+    // app's composer with text prefilled, but it CANNOT silently tap
+    // Send/Post for the user — and this app never tries (no Accessibility
+    // auto-tap on Send/Post buttons, no password/OTP/payment bypass).
+    // Every outcome below says exactly what opened and what the user
+    // still has to tap.
+
+    /** True when [packageName] is installed (launchable or not). */
+    private fun isInstalled(packageName: String): Boolean = try {
+        context.packageManager.getPackageInfo(packageName, 0)
+        true
+    } catch (_: Exception) {
+        false
+    }
+
+    /**
+     * WhatsApp message: opens the chat with the message prefilled.
+     * PERMISSION-GATED: needs Contacts to resolve a name to a number
+     * (a direct number works without the lookup, but the gate still
+     * applies per the central rule — see PermissionGate.missingForTool).
+     * The message is NOT sent — the user taps Send in WhatsApp.
+     */
+    fun sendWhatsappMessage(target: String, message: String): ToolOutcome {
+        val missing = PermissionGate.missingForTool(context, "send_whatsapp_message")
+        if (missing.isNotEmpty()) return blocked(missing.first())
+        val t = target.trim()
+        val msg = message.trim()
+        if (t.isBlank()) return ToolOutcome(false, "Kisko WhatsApp karna hai, naam ya number bolo.")
+        if (msg.isBlank()) return ToolOutcome(false, "WhatsApp par kya likhna hai, message bolo.")
+        val digits: String
+        val display: String
+        if (t.matches(Regex("^[+0-9][0-9 ()-]{5,}$"))) {
+            var d = t.filter { it.isDigit() }
+            // A bare 10-digit Indian number gets the India country code.
+            if (d.length == 10) d = "91$d"
+            digits = d
+            display = t
+        } else {
+            val found = findContactNumber(t)
+                ?: return ToolOutcome(
+                    false,
+                    "\"$t\" naam contacts me nahi mila — sahi naam ya number bolo."
+                )
+            var d = found.second.filter { it.isDigit() }
+            if (d.length == 10) d = "91$d"
+            digits = d
+            display = found.first
+        }
+        if (digits.length < 10) return ToolOutcome(false, "\"$display\" ka number sahi nahi lag raha — number check karke bolo.")
+        val encoded = try {
+            URLEncoder.encode(msg, "UTF-8")
+        } catch (_: Exception) {
+            return ToolOutcome(false, "Message encode nahi ho paya, phir try karo.")
+        }
+        val intent = Intent(
+            Intent.ACTION_VIEW,
+            Uri.parse("https://wa.me/$digits?text=$encoded")
+        ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+        return try {
+            context.startActivity(intent)
+            ToolOutcome(
+                true,
+                "WhatsApp khul gaya — $display ko message likha hua hai. " +
+                    "Send tumhe khud dabana hoga, main khud se message nahi bhej sakta."
+            )
+        } catch (_: Exception) {
+            ToolOutcome(false, "WhatsApp khul nahi paya, phir try karo.")
+        }
+    }
+
+    /** Plays a song: YouTube Music app → YouTube app → browser search. Reports which opened. */
+    fun playYoutubeMusic(query: String): ToolOutcome {
+        val q = query.trim()
+        if (q.isBlank()) return ToolOutcome(false, "Kaunsa gaana bajana hai, naam bolo.")
+        val encoded = try { URLEncoder.encode(q, "UTF-8") } catch (_: Exception) { return ToolOutcome(false, "Gaana search nahi ho paya, phir try karo.") }
+        val ytMusicPkg = "com.google.android.apps.youtube.music"
+        val youtubePkg = "com.google.android.apps.youtube"
+        return try {
+            if (isInstalled(ytMusicPkg)) {
+                val intent = Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse("https://music.youtube.com/search?q=$encoded")
+                ).apply {
+                    setPackage(ytMusicPkg)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+                ToolOutcome(true, "YouTube Music me \"$q\" search karke khol diya — play dabao, gaana baj jayega.")
+            } else if (isInstalled(youtubePkg)) {
+                val intent = Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse("https://www.youtube.com/results?search_query=$encoded")
+                ).apply {
+                    setPackage(youtubePkg)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+                ToolOutcome(true, "YouTube Music app nahi mili, isliye YouTube app me \"$q\" khol diya — play dabao.")
+            } else {
+                val intent = Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse("https://www.youtube.com/results?search_query=$encoded")
+                ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+                context.startActivity(intent)
+                ToolOutcome(true, "Browser me YouTube par \"$q\" khol diya — YouTube Music app install karo to seedha wahi khulega.")
+            }
+        } catch (_: Exception) {
+            ToolOutcome(false, "\"$q\" bajane ke liye YouTube Music khul nahi paya, phir try karo.")
+        }
+    }
+
+    /** Plays/searches a video: YouTube app → browser search. Reports which opened. */
+    fun playYoutubeVideo(query: String): ToolOutcome {
+        val q = query.trim()
+        if (q.isBlank()) return ToolOutcome(false, "Kaunsi video dekhni hai, naam bolo.")
+        val encoded = try { URLEncoder.encode(q, "UTF-8") } catch (_: Exception) { return ToolOutcome(false, "Video search nahi ho paya, phir try karo.") }
+        val youtubePkg = "com.google.android.apps.youtube"
+        return try {
+            if (isInstalled(youtubePkg)) {
+                val intent = Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse("https://www.youtube.com/results?search_query=$encoded")
+                ).apply {
+                    setPackage(youtubePkg)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+                ToolOutcome(true, "YouTube app me \"$q\" khol diya — video chun ke play dabao.")
+            } else {
+                val intent = Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse("https://www.youtube.com/results?search_query=$encoded")
+                ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+                context.startActivity(intent)
+                ToolOutcome(true, "Browser me YouTube par \"$q\" khol diya — YouTube app install karo to seedha wahi khulega.")
+            }
+        } catch (_: Exception) {
+            ToolOutcome(false, "\"$q\" ke liye YouTube khul nahi paya, phir try karo.")
+        }
+    }
+
+    /**
+     * Facebook post: opens the Facebook composer with the text prefilled.
+     * The post is NOT published — the user taps Post in Facebook.
+     * Falls back to a share chooser / browser if the Facebook app is missing.
+     */
+    fun createFacebookPost(text: String): ToolOutcome {
+        val post = text.trim()
+        if (post.isBlank()) return ToolOutcome(false, "Facebook par kya likhna hai, text bolo.")
+        val fbPkg = "com.facebook.katana"
+        return try {
+            if (isInstalled(fbPkg)) {
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, post)
+                    setPackage(fbPkg)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+                ToolOutcome(
+                    true,
+                    "Facebook composer khul gaya — tumhara post likha hua hai. " +
+                        "Post tumhe khud dabana hoga, main khud se post nahi kar sakta."
+                )
+            } else {
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, post)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(Intent.createChooser(intent, "Post share karo").apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                })
+                ToolOutcome(
+                    true,
+                    "Facebook app nahi mili, isliye share menu khol diya — Facebook chun ke Post dabao."
+                )
+            }
+        } catch (_: Exception) {
+            ToolOutcome(false, "Facebook composer khul nahi paya, phir try karo.")
         }
     }
 }

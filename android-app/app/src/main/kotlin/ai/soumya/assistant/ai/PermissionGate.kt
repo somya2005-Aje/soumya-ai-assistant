@@ -40,6 +40,7 @@ object PermissionGate {
     const val BLUETOOTH = "bluetooth"
     const val BACKGROUND = "background"
     const val ACCESSIBILITY = "accessibility"
+    const val OVERLAY = "overlay"
 
     /** One missing grant: what it is called in Hindi and what the AI asks. */
     data class Requirement(
@@ -52,7 +53,7 @@ object PermissionGate {
     val ALL_KEYS = listOf(
         MICROPHONE, CONTACTS, CALL, GALLERY, FILES, NOTIFICATIONS,
         NOTIFICATION_LISTENER, ALARMS, LOCATION, CAMERA, BLUETOOTH,
-        BACKGROUND, ACCESSIBILITY
+        BACKGROUND, ACCESSIBILITY, OVERLAY
     )
 
     private val REQUIREMENTS = mapOf(
@@ -107,6 +108,10 @@ object PermissionGate {
         ACCESSIBILITY to Requirement(
             ACCESSIBILITY, "Accessibility",
             "Accessibility service on nahi hai — Settings me on karo, tab main automation kar paunga."
+        ),
+        OVERLAY to Requirement(
+            OVERLAY, "Overlay / Draw over other apps",
+            "Dusri apps ke upar dikhane ki permission nahi hai — Settings me 'Allow display over other apps' on karo, tab main floating assistant dikha paunga."
         )
     )
 
@@ -121,6 +126,7 @@ object PermissionGate {
             "make_call" -> listOf(CONTACTS, CALL)
             "list_recent_photos" -> listOf(GALLERY)
             "create_reminder" -> listOf(ALARMS)
+            "send_whatsapp_message" -> listOf(CONTACTS)
             else -> emptyList()
         }
         return keys.filter { !isGranted(context, it) }.map { info(it) }
@@ -166,6 +172,7 @@ object PermissionGate {
                 Settings.Secure.getString(
                     context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
                 )?.contains(SoumyaAccessibilityService::class.java.name) == true
+            OVERLAY -> Settings.canDrawOverlays(context)
             else -> true
         }
     }
@@ -220,6 +227,8 @@ object PermissionGate {
         BACKGROUND -> Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
             .setData(Uri.parse("package:${context.packageName}"))
         ACCESSIBILITY -> Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+        OVERLAY -> Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
+            .setData(Uri.parse("package:${context.packageName}"))
         NOTIFICATIONS -> Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
             .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
         else -> null
