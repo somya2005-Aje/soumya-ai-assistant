@@ -194,6 +194,12 @@ fun PermissionsScreen(onBack: () -> Unit) {
                 )
             },
             "Open settings"
+        ),
+        PermRow(
+            "Auto-Send (WhatsApp / Facebook)", "Send messages/posts without tapping Send — only when you turned the toggle ON (Settings / Automation Center / Home) and Accessibility is on. One tap on the toggle stops it.",
+            if (PermissionGate.isGranted(context, PermissionGate.AUTO_SEND)) PermState.GRANTED else PermState.NOT_GRANTED,
+            { openSystemSettings(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
+            "Open settings"
         )
     )
 

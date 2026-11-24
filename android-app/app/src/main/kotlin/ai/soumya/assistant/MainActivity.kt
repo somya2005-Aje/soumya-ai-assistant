@@ -207,7 +207,7 @@ class MainActivity : ComponentActivity() {
                         MemoryScreen(repo = memoryRepo, onBack = { navController.popBackStack() })
                     }
                     composable("automation") {
-                        AutomationScreen(executor = executor, onBack = { navController.popBackStack() })
+                        AutomationScreen(executor = executor, prefs = prefs, onBack = { navController.popBackStack() })
                     }
                     composable("permissions") {
                         PermissionsScreen(onBack = { navController.popBackStack() })

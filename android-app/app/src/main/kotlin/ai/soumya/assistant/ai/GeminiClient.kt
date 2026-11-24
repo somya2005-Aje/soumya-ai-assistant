@@ -86,16 +86,17 @@ class GeminiClient(
             props("query" to "STRING"), emptyList())
         fn("save_memory", "Save a user-approved fact or preference to long-term memory.",
             props("title" to "STRING", "content" to "STRING"), listOf("title", "content"))
-        // v1.2.0 (LIA edition) — honest limits: WhatsApp/Facebook open the
-        // composer with the text prefilled; the USER taps Send/Post. Android
-        // cannot silently auto-send or auto-post, and this app never tries.
-        fn("send_whatsapp_message", "Open WhatsApp chat with a contact (by name) or a phone number, with the message prefilled. The user taps Send — it is NOT sent silently.",
+        // v1.2.0 (LIA edition) — two modes: COMPOSER (default — the chat /
+        // composer opens prefilled and the USER taps Send/Post) and AUTO-SEND
+        // (only when the user turned ON the one-time Auto-Send toggle and
+        // granted Accessibility — then the app sends it itself, once).
+        fn("send_whatsapp_message", "Open WhatsApp chat with a contact (by name) or a phone number, with the message prefilled. If the user enabled WhatsApp Auto-Send, the message is sent automatically; otherwise the user taps Send.",
             props("target" to "STRING", "message" to "STRING"), listOf("target", "message"))
         fn("play_youtube_music", "Play a song on YouTube Music (falls back to YouTube app, then browser).",
             props("query" to "STRING"), listOf("query"))
         fn("play_youtube_video", "Play/search a video on YouTube.",
             props("query" to "STRING"), listOf("query"))
-        fn("create_facebook_post", "Open the Facebook composer with the post text prefilled. The user taps Post — it is NOT posted silently.",
+        fn("create_facebook_post", "Open the Facebook composer with the post text prefilled. If the user enabled Facebook Auto-Post, the post is published automatically; otherwise the user taps Post.",
             props("text" to "STRING"), listOf("text"))
         return JSONObject().put("functionDeclarations", functions)
     }

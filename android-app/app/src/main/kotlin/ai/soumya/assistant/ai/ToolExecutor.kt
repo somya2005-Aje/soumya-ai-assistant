@@ -15,7 +15,10 @@ import android.provider.ContactsContract
 import android.provider.MediaStore
 import android.provider.Settings
 import ai.soumya.assistant.data.MemoryRepository
+import ai.soumya.assistant.data.Prefs
+import ai.soumya.assistant.service.AutoSendRequest
 import ai.soumya.assistant.service.ReminderReceiver
+import kotlinx.coroutines.delay
 import org.json.JSONObject
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
@@ -30,6 +33,7 @@ class ToolExecutor(
     private val context: Context,
     private val memoryRepo: MemoryRepository
 ) {
+    private val prefs: Prefs by lazy { Prefs(context) }
 
     /**
      * Outcome of a tool run. [needsPermission] is the PermissionGate key the
@@ -409,12 +413,20 @@ class ToolExecutor(
     }
 
     // ---- v1.2.0 (LIA edition) --------------------------------------------
-    // HONEST DESIGN (hard rule): Android lets an ordinary app OPEN another
-    // app's composer with text prefilled, but it CANNOT silently tap
-    // Send/Post for the user — and this app never tries (no Accessibility
-    // auto-tap on Send/Post buttons, no password/OTP/payment bypass).
-    // Every outcome below says exactly what opened and what the user
-    // still has to tap.
+    // TWO MODES (user order):
+    // 1. COMPOSER MODE (default): the app opens the WhatsApp chat / Facebook
+    //    composer with the text prefilled; the USER taps Send/Post. Android
+    //    cannot silently send, and nothing auto-taps anything.
+    // 2. AUTO-SEND MODE (only when the user turned ON the one-time
+    //    Auto-Send toggle for that app in Settings / Automation Center /
+    //    Setup Wizard AND granted Accessibility): the app opens the same
+    //    composer, arms a one-shot [AutoSendRequest] for that exact package,
+    //    and the AccessibilityService clicks Send/Post once. The click only
+    //    ever happens while that request is armed, for a message the user
+    //    themselves dictated, from the user's own account. Toggle OFF =
+    //    auto-click stops immediately. Auto-send NEVER touches passwords,
+    //    OTPs or payments. If the click does not happen within 30 seconds,
+    //    the outcome honestly says so and the user taps Send/Post manually.
 
     /** True when [packageName] is installed (launchable or not). */
     private fun isInstalled(packageName: String): Boolean = try {
@@ -425,13 +437,40 @@ class ToolExecutor(
     }
 
     /**
-     * WhatsApp message: opens the chat with the message prefilled.
-     * PERMISSION-GATED: needs Contacts to resolve a name to a number
-     * (a direct number works without the lookup, but the gate still
-     * applies per the central rule — see PermissionGate.missingForTool).
-     * The message is NOT sent — the user taps Send in WhatsApp.
+     * Waits (max 30s) for the AccessibilityService to report the armed
+     * auto-send click. Returns its verified outcome, or an honest fallback
+     * message when nothing clicked in time — never a false success.
+     * If the user turns the toggle OFF mid-wait, stops at once.
      */
-    fun sendWhatsappMessage(target: String, message: String): ToolOutcome {
+    private suspend fun waitForAutoSendResult(
+        isStillOn: () -> Boolean,
+        fallbackMessage: String
+    ): ToolOutcome {
+        val deadline = System.currentTimeMillis() + AutoSendRequest.TIMEOUT_MS
+        while (System.currentTimeMillis() < deadline) {
+            AutoSendRequest.outcome?.let { outcome ->
+                return ToolOutcome(outcome.success, outcome.message)
+            }
+            if (!isStillOn()) {
+                AutoSendRequest.clear()
+                return ToolOutcome(
+                    false,
+                    "Auto-Send band kar diya gaya — composer khula hai, Send/Post khud tap kar do."
+                )
+            }
+            delay(500)
+        }
+        AutoSendRequest.clear()
+        return ToolOutcome(false, fallbackMessage)
+    }
+
+    /**
+     * WhatsApp message: opens the chat with the message prefilled.
+     * Name lookup needs Contacts (checked here, since the central gate only
+     * demands Accessibility when Auto-Send is ON). Auto-Send ON = the
+     * service clicks Send once; OFF = composer mode, user taps Send.
+     */
+    suspend fun sendWhatsappMessage(target: String, message: String): ToolOutcome {
         val missing = PermissionGate.missingForTool(context, "send_whatsapp_message")
         if (missing.isNotEmpty()) return blocked(missing.first())
         val t = target.trim()
@@ -447,6 +486,10 @@ class ToolExecutor(
             digits = d
             display = t
         } else {
+            // Name lookup needs Contacts — ask for it instead of failing.
+            if (!PermissionGate.isGranted(context, PermissionGate.CONTACTS)) {
+                return blocked(PermissionGate.info(PermissionGate.CONTACTS))
+            }
             val found = findContactNumber(t)
                 ?: return ToolOutcome(
                     false,
@@ -463,18 +506,29 @@ class ToolExecutor(
         } catch (_: Exception) {
             return ToolOutcome(false, "Message encode nahi ho paya, phir try karo.")
         }
+        val autoSend = prefs.autoSendWhatsApp
+        if (autoSend) AutoSendRequest.arm(AutoSendRequest.WHATSAPP_PACKAGE)
         val intent = Intent(
             Intent.ACTION_VIEW,
             Uri.parse("https://wa.me/$digits?text=$encoded")
         ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
         return try {
             context.startActivity(intent)
-            ToolOutcome(
-                true,
-                "WhatsApp khul gaya — $display ko message likha hua hai. " +
-                    "Send tumhe khud dabana hoga, main khud se message nahi bhej sakta."
-            )
+            if (autoSend) {
+                waitForAutoSendResult(
+                    isStillOn = { prefs.autoSendWhatsApp },
+                    fallbackMessage = "Auto-send nahi ho paya, WhatsApp khula hai aur message likha hua hai — Send khud tap kar do."
+                )
+            } else {
+                ToolOutcome(
+                    true,
+                    "WhatsApp khul gaya — $display ko message likha hua hai. " +
+                        "Send tumhe khud dabana hoga, main khud se message nahi bhej sakta. " +
+                        "(Auto-Send ON karo to main khud bhej dunga — Settings → Auto-Send.)"
+                )
+            }
         } catch (_: Exception) {
+            AutoSendRequest.clear()
             ToolOutcome(false, "WhatsApp khul nahi paya, phir try karo.")
         }
     }
@@ -552,15 +606,21 @@ class ToolExecutor(
 
     /**
      * Facebook post: opens the Facebook composer with the text prefilled.
-     * The post is NOT published — the user taps Post in Facebook.
-     * Falls back to a share chooser / browser if the Facebook app is missing.
+     * Auto-Send ON (and Facebook app installed) = the service clicks Post
+     * once; OFF = composer mode, user taps Post. Without the Facebook app,
+     * auto-send cannot run — the share menu opens instead and the user
+     * picks Facebook and taps Post themselves.
      */
-    fun createFacebookPost(text: String): ToolOutcome {
+    suspend fun createFacebookPost(text: String): ToolOutcome {
         val post = text.trim()
         if (post.isBlank()) return ToolOutcome(false, "Facebook par kya likhna hai, text bolo.")
+        val missing = PermissionGate.missingForTool(context, "create_facebook_post")
+        if (missing.isNotEmpty()) return blocked(missing.first())
         val fbPkg = "com.facebook.katana"
+        val autoSend = prefs.autoSendFacebook
         return try {
             if (isInstalled(fbPkg)) {
+                if (autoSend) AutoSendRequest.arm(AutoSendRequest.FACEBOOK_PACKAGE)
                 val intent = Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
                     putExtra(Intent.EXTRA_TEXT, post)
@@ -568,11 +628,19 @@ class ToolExecutor(
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 context.startActivity(intent)
-                ToolOutcome(
-                    true,
-                    "Facebook composer khul gaya — tumhara post likha hua hai. " +
-                        "Post tumhe khud dabana hoga, main khud se post nahi kar sakta."
-                )
+                if (autoSend) {
+                    waitForAutoSendResult(
+                        isStillOn = { prefs.autoSendFacebook },
+                        fallbackMessage = "Auto-post nahi ho paya, Facebook composer khula hai aur post likha hua hai — Post khud tap kar do."
+                    )
+                } else {
+                    ToolOutcome(
+                        true,
+                        "Facebook composer khul gaya — tumhara post likha hua hai. " +
+                            "Post tumhe khud dabana hoga, main khud se post nahi kar sakta. " +
+                            "(Auto-Post ON karo to main khud post kar dunga — Settings → Auto-Send.)"
+                    )
+                }
             } else {
                 val intent = Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
@@ -584,10 +652,12 @@ class ToolExecutor(
                 })
                 ToolOutcome(
                     true,
-                    "Facebook app nahi mili, isliye share menu khol diya — Facebook chun ke Post dabao."
+                    "Facebook app nahi mili, isliye share menu khol diya — Facebook chun ke Post dabao. " +
+                        "Auto-Post sirf Facebook app me kaam karta hai."
                 )
             }
         } catch (_: Exception) {
+            AutoSendRequest.clear()
             ToolOutcome(false, "Facebook composer khul nahi paya, phir try karo.")
         }
     }

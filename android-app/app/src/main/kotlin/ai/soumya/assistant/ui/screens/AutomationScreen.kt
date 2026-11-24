@@ -50,8 +50,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
+import ai.soumya.assistant.ai.PermissionGate
 import ai.soumya.assistant.ai.ToolExecutor
 import ai.soumya.assistant.ai.ToolExecutor.LaunchableApp
+import ai.soumya.assistant.data.Prefs
 import ai.soumya.assistant.service.SoumyaNotificationListener
 import ai.soumya.assistant.ui.theme.CardBg
 import ai.soumya.assistant.ui.theme.Cyan400
@@ -67,13 +69,19 @@ import java.util.Locale
 data class AutomationTask(val description: String, val status: String, val time: Long = System.currentTimeMillis())
 
 @Composable
-fun AutomationScreen(executor: ToolExecutor, onBack: () -> Unit) {
+fun AutomationScreen(executor: ToolExecutor, prefs: Prefs, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val history = remember { mutableStateListOf<AutomationTask>() }
     var appName by remember { mutableStateOf("") }
     var reminderText by remember { mutableStateOf("") }
     var reminderMinutes by remember { mutableStateOf("30") }
+
+    // Auto-Send toggles (v1.2.0): one tap to stop — takes effect at once and
+    // clears any pending auto-send request.
+    var autoWa by remember { mutableStateOf(prefs.autoSendWhatsApp) }
+    var autoFb by remember { mutableStateOf(prefs.autoSendFacebook) }
+    val accessibilityOn = PermissionGate.isGranted(context, PermissionGate.ACCESSIBILITY)
     var folderName by remember { mutableStateOf("SoumyaAI") }
     var pickedFile by remember { mutableStateOf<String?>(null) }
     var folderToDelete by remember { mutableStateOf<File?>(null) }
@@ -122,6 +130,30 @@ fun AutomationScreen(executor: ToolExecutor, onBack: () -> Unit) {
         if (lastResult.isNotBlank()) {
             Spacer(Modifier.height(8.dp))
             Text(lastResult, fontSize = 13.sp, color = Color.White)
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Text("Auto-Send — WhatsApp / Facebook", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        Text(
+            "ON ho to tumhari awaaz par message/post tumhare bina tap kiye bhej diya jayega — " +
+                "sirf tumhare khud ke account se, sirf tumhare bole hue message par. " +
+                "OFF karte hi auto-send turant band ho jata hai aur pending send cancel ho jata hai. " +
+                "Auto-Send ke liye Accessibility service on honi chahiye.",
+            fontSize = 13.sp, color = TextSecondary
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Accessibility: " + if (accessibilityOn) "ON ✓" else "OFF — Permissions dashboard se on karo",
+            fontSize = 13.sp,
+            color = if (accessibilityOn) Color(0xFF38E6B5) else Color(0xFFFFB020)
+        )
+        SwitchRow("WhatsApp Auto-Send", autoWa) { enabled ->
+            autoWa = enabled; prefs.autoSendWhatsApp = enabled
+            log("WhatsApp Auto-Send", if (enabled) "ON — ab WhatsApp message khud bheja jayega." else "OFF — auto-send band, ab composer khulega aur tum khud Send dabaoge.")
+        }
+        SwitchRow("Facebook Auto-Post", autoFb) { enabled ->
+            autoFb = enabled; prefs.autoSendFacebook = enabled
+            log("Facebook Auto-Post", if (enabled) "ON — ab Facebook post khud publish hoga." else "OFF — auto-post band, ab composer khulega aur tum khud Post dabaoge.")
         }
 
         Spacer(Modifier.height(16.dp))

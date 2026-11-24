@@ -11,6 +11,7 @@ import android.os.PowerManager
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import ai.soumya.assistant.data.Prefs
 import ai.soumya.assistant.service.SoumyaAccessibilityService
 
 /**
@@ -41,6 +42,7 @@ object PermissionGate {
     const val BACKGROUND = "background"
     const val ACCESSIBILITY = "accessibility"
     const val OVERLAY = "overlay"
+    const val AUTO_SEND = "auto_send"
 
     /** One missing grant: what it is called in Hindi and what the AI asks. */
     data class Requirement(
@@ -53,7 +55,7 @@ object PermissionGate {
     val ALL_KEYS = listOf(
         MICROPHONE, CONTACTS, CALL, GALLERY, FILES, NOTIFICATIONS,
         NOTIFICATION_LISTENER, ALARMS, LOCATION, CAMERA, BLUETOOTH,
-        BACKGROUND, ACCESSIBILITY, OVERLAY
+        BACKGROUND, ACCESSIBILITY, OVERLAY, AUTO_SEND
     )
 
     private val REQUIREMENTS = mapOf(
@@ -112,6 +114,10 @@ object PermissionGate {
         OVERLAY to Requirement(
             OVERLAY, "Overlay / Draw over other apps",
             "Dusri apps ke upar dikhane ki permission nahi hai — Settings me 'Allow display over other apps' on karo, tab main floating assistant dikha paunga."
+        ),
+        AUTO_SEND to Requirement(
+            AUTO_SEND, "Auto-Send (WhatsApp / Facebook)",
+            "Auto-send ke liye Accessibility service on karo aur Settings ya Automation Center me WhatsApp/Facebook Auto-Send toggle ON karo — tab main tumhare bole hue message khud bhej paunga. Toggle OFF hai to composer khulta hai aur tum khud Send dabate ho."
         )
     )
 
@@ -120,13 +126,23 @@ object PermissionGate {
 
     fun askMessage(key: String): String = info(key).askMessage
 
-    /** Which Gemini tools need which grants. Tools not listed need none. */
+    /** Which Gemini tools need which grants. Tools not listed need none.
+     *
+     * Auto-send rule (v1.2.0): when the user turned ON the one-time
+     * Auto-Send toggle for WhatsApp/Facebook, that tool needs Accessibility
+     * (the service clicks Send/Post). When the toggle is OFF the tool runs
+     * in composer mode and needs no extra grant — the user taps Send/Post
+     * themselves. Contacts is checked separately inside the executor when a
+     * contact NAME (not a number) has to be resolved.
+     */
     fun missingForTool(context: Context, toolName: String): List<Requirement> {
+        val prefs = Prefs(context)
         val keys = when (toolName) {
             "make_call" -> listOf(CONTACTS, CALL)
             "list_recent_photos" -> listOf(GALLERY)
             "create_reminder" -> listOf(ALARMS)
-            "send_whatsapp_message" -> listOf(CONTACTS)
+            "send_whatsapp_message" -> if (prefs.autoSendWhatsApp) listOf(ACCESSIBILITY) else emptyList()
+            "create_facebook_post" -> if (prefs.autoSendFacebook) listOf(ACCESSIBILITY) else emptyList()
             else -> emptyList()
         }
         return keys.filter { !isGranted(context, it) }.map { info(it) }
@@ -173,6 +189,13 @@ object PermissionGate {
                     context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
                 )?.contains(SoumyaAccessibilityService::class.java.name) == true
             OVERLAY -> Settings.canDrawOverlays(context)
+            // Auto-Send counts as granted only when at least one Auto-Send
+            // toggle is ON *and* the Accessibility service is running.
+            AUTO_SEND -> {
+                val prefs = Prefs(context)
+                (prefs.autoSendWhatsApp || prefs.autoSendFacebook) &&
+                    isGranted(context, ACCESSIBILITY)
+            }
             else -> true
         }
     }
@@ -229,6 +252,7 @@ object PermissionGate {
         ACCESSIBILITY -> Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
         OVERLAY -> Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
             .setData(Uri.parse("package:${context.packageName}"))
+        AUTO_SEND -> Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
         NOTIFICATIONS -> Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
             .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
         else -> null

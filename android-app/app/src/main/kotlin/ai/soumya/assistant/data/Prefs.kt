@@ -130,6 +130,28 @@ class Prefs(context: Context) {
         get() = settings.getBoolean("setup_done", false)
         set(value) { settings.edit().putBoolean("setup_done", value).apply() }
 
+    // ---- One-time Auto-Send (v1.2.0 update, user order) -------------------
+    // Default OFF. When ON, the app may send a WhatsApp message / Facebook
+    // post the user asked for WITHOUT asking again and WITHOUT the user
+    // tapping Send/Post — the AccessibilityService clicks the Send/Post
+    // button, but ONLY while a pending auto-send request is armed for that
+    // exact app, and ONLY for a message the user themselves dictated.
+    // Turning a toggle OFF takes effect immediately and clears any pending
+    // auto-send request. Auto-send NEVER touches passwords, OTPs or payments.
+    var autoSendWhatsApp: Boolean
+        get() = settings.getBoolean("auto_send_whatsapp", false)
+        set(value) {
+            settings.edit().putBoolean("auto_send_whatsapp", value).apply()
+            if (!value) ai.soumya.assistant.service.AutoSendRequest.clear()
+        }
+
+    var autoSendFacebook: Boolean
+        get() = settings.getBoolean("auto_send_facebook", false)
+        set(value) {
+            settings.edit().putBoolean("auto_send_facebook", value).apply()
+            if (!value) ai.soumya.assistant.service.AutoSendRequest.clear()
+        }
+
     /** Gemini model chosen in Settings / Setup Wizard (default: newest flash). */
     var geminiModel: String
         get() = settings.getString("gemini_model", "gemini-3.6-flash") ?: "gemini-3.6-flash"

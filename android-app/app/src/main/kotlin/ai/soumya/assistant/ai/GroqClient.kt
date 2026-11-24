@@ -79,13 +79,13 @@ class GroqClient(
             props("query" to "string"), emptyList())
         fn("save_memory", "Save a user-approved fact or preference to long-term memory.",
             props("title" to "string", "content" to "string"), listOf("title", "content"))
-        fn("send_whatsapp_message", "Open WhatsApp chat with a contact (by name) or a phone number, with the message prefilled. HONEST LIMIT: the chat opens with the message typed — the USER taps Send. Android cannot silently auto-send a WhatsApp message.",
+        fn("send_whatsapp_message", "Open WhatsApp chat with a contact (by name) or a phone number, with the message prefilled. If the user enabled WhatsApp Auto-Send, the message is sent automatically; otherwise the user taps Send.",
             props("target" to "string", "message" to "string"), listOf("target", "message"))
         fn("play_youtube_music", "Play a song on YouTube Music (falls back to YouTube app, then browser).",
             props("query" to "string"), listOf("query"))
         fn("play_youtube_video", "Play/search a video on YouTube.",
             props("query" to "string"), listOf("query"))
-        fn("create_facebook_post", "Open the Facebook composer with the post text prefilled. HONEST LIMIT: the composer opens — the USER taps Post. Android cannot silently auto-post to Facebook.",
+        fn("create_facebook_post", "Open the Facebook composer with the post text prefilled. If the user enabled Facebook Auto-Post, the post is published automatically; otherwise the user taps Post.",
             props("text" to "string"), listOf("text"))
         return tools
     }

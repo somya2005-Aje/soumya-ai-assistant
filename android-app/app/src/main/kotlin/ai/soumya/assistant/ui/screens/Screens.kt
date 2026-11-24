@@ -170,6 +170,8 @@ fun HomeScreen(
     quickResult: String
 ) {
     var input by remember { mutableStateOf("") }
+    var autoWa by remember { mutableStateOf(prefs.autoSendWhatsApp) }
+    var autoFb by remember { mutableStateOf(prefs.autoSendFacebook) }
     val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
     val greeting = when (hour) {
         in 5..11 -> "Good morning"
@@ -280,6 +282,14 @@ fun HomeScreen(
                 Triple("LIA Setup Wizard", Icons.Filled.Settings) { onNavigate("setup") }
             )
         )
+        Spacer(Modifier.height(16.dp))
+        Text("Auto-Send (WhatsApp / Facebook)", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.fillMaxWidth())
+        Text(
+            "ON ho to tumhari awaaz par message/post khud bhej diya jayega. Ek tap me band karo — turant effect hota hai.",
+            fontSize = 13.sp, color = TextSecondary, modifier = Modifier.fillMaxWidth()
+        )
+        SwitchRow("WhatsApp Auto-Send", autoWa) { autoWa = it; prefs.autoSendWhatsApp = it }
+        SwitchRow("Facebook Auto-Post", autoFb) { autoFb = it; prefs.autoSendFacebook = it }
         Spacer(Modifier.height(16.dp))
         Text("Recent memories", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(8.dp))

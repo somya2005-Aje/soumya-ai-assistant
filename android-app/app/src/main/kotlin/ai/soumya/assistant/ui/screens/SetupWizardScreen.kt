@@ -52,9 +52,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * First-run Setup Wizard (v1.2.0, LIA edition) — the same 6 steps the LIA
- * tutorial walks through: Play Protect, Restricted Settings, Accessibility,
- * Overlay + Background, API keys (Gemini + Groq, with the Error 400 fix),
+ * First-run Setup Wizard (v1.2.0, LIA edition) — the same steps the LIA
+ * tutorial walks through, plus Auto-Send: Play Protect, Restricted Settings,
+ * Accessibility, Overlay + Background, API keys (Gemini + Groq, with the
+ * Error 400 fix), Auto-Send Permission (one-time, default OFF),
  * Personality / Voice / Model.
  *
  * Shown after Splash on first run (while !prefs.setupDone) and reopenable
@@ -157,7 +158,11 @@ fun SetupWizardScreen(prefs: Prefs, onFinish: () -> Unit) {
         }
     }
 
-    // ---- Step 6 state ------------------------------------------------------
+    // ---- Step 6 (auto-send) state ----------------------------------------
+    var autoWa by remember { mutableStateOf(prefs.autoSendWhatsApp) }
+    var autoFb by remember { mutableStateOf(prefs.autoSendFacebook) }
+
+    // ---- Step 7 state ------------------------------------------------------
     var personality by remember { mutableStateOf(prefs.personality) }
     var provider by remember { mutableStateOf(prefs.aiProvider) }
     var geminiModel by remember { mutableStateOf(prefs.geminiModel) }
@@ -180,7 +185,7 @@ fun SetupWizardScreen(prefs: Prefs, onFinish: () -> Unit) {
                 }
             }
             Text(
-                "Setup Wizard — Step ${step + 1} / 6",
+                "Setup Wizard — Step ${step + 1} / 7",
                 fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White
             )
         }
@@ -360,7 +365,51 @@ fun SetupWizardScreen(prefs: Prefs, onFinish: () -> Unit) {
                 }
             }
             5 -> {
-                Text("6. Personality, Voice & Model", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text("6. Auto-Send Permission (ek baar)", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "⚠️ ON karne par tumhari awaaz par WhatsApp message / Facebook post " +
+                        "tumhare bina tap kiye bhej diya jayega. Sirf tab ON karo jab tum ye chahte ho.\n\n" +
+                        "• Auto-send sirf TUMHARE khud ke account se, sirf TUMHARE bole hue message par, " +
+                        "aur sirf jab ye toggle ON ho — tabhi kaam karta hai.\n" +
+                        "• Iske liye Accessibility service chahiye (Step 3) — wahi service Send/Post button dabati hai.\n" +
+                        "• OFF hai to kuch nahi badlega: composer khulega aur tum khud Send/Post dabaoge.\n" +
+                        "• Kabhi bhi ek tap me band kar sakte ho — Settings, Automation Center ya Home se.",
+                    fontSize = 14.sp, color = TextSecondary
+                )
+                Spacer(Modifier.height(12.dp))
+                StatusLine("Accessibility service", accessibilityOn)
+                if (!accessibilityOn) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Auto-Send ke liye pehle Accessibility on karo (Step 3 par wapas jao, ya neeche button dabao).",
+                        fontSize = 13.sp, color = Color(0xFFFFB020)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Button(
+                        onClick = { openSettings(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Accessibility on karo") }
+                }
+                Spacer(Modifier.height(12.dp))
+                SwitchRow("WhatsApp Auto-Send", autoWa) { enabled ->
+                    autoWa = enabled; prefs.autoSendWhatsApp = enabled
+                }
+                Text(
+                    "ON: \"Ravi ko WhatsApp karo …\" bolne par message khud bhej diya jayega, dobara permission nahi maangi jayegi.",
+                    fontSize = 12.sp, color = TextSecondary
+                )
+                Spacer(Modifier.height(8.dp))
+                SwitchRow("Facebook Auto-Post", autoFb) { enabled ->
+                    autoFb = enabled; prefs.autoSendFacebook = enabled
+                }
+                Text(
+                    "ON: \"Facebook par post karo …\" bolne par post khud publish ho jayega, dobara permission nahi maangi jayegi.",
+                    fontSize = 12.sp, color = TextSecondary
+                )
+            }
+            6 -> {
+                Text("7. Personality, Voice & Model", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
                 Spacer(Modifier.height(8.dp))
                 Section("Personality")
                 RadioRow("JARVIS style (default)", personality == "jarvis") { personality = "jarvis"; prefs.personality = "jarvis" }
@@ -391,7 +440,7 @@ fun SetupWizardScreen(prefs: Prefs, onFinish: () -> Unit) {
         Row(Modifier.fillMaxWidth()) {
             OutlinedButton(onClick = { prefs.setupDone = true; onFinish() }) { Text("Skip") }
             Spacer(Modifier.weight(1f))
-            if (step < 5) {
+            if (step < 6) {
                 Button(onClick = { step++ }) { Text("Next") }
             } else {
                 Button(onClick = { prefs.setupDone = true; onFinish() }) { Text("Finish — Shuru karo") }

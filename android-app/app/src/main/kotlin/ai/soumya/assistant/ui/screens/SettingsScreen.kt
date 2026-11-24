@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ai.soumya.assistant.ai.GeminiClient
 import ai.soumya.assistant.ai.GroqClient
+import ai.soumya.assistant.ai.PermissionGate
 import ai.soumya.assistant.data.Prefs
 import ai.soumya.assistant.service.AssistantService
 import ai.soumya.assistant.ui.theme.CardBg
@@ -82,8 +83,9 @@ fun SettingsScreen(
     var groqNoteOk by remember { mutableStateOf(true) }
     var groqChecking by remember { mutableStateOf(false) }
 
-    // ---- Provider / model / personality (v1.2.0).
-    var provider by remember { mutableStateOf(prefs.aiProvider) }
+    // ---- Auto-Send toggles (v1.2.0) — one tap to stop, takes effect at once.
+    var autoWa by remember { mutableStateOf(prefs.autoSendWhatsApp) }
+    var autoFb by remember { mutableStateOf(prefs.autoSendFacebook) }
     var personality by remember { mutableStateOf(prefs.personality) }
     var geminiModel by remember { mutableStateOf(prefs.geminiModel) }
     var groqModel by remember { mutableStateOf(prefs.groqModel) }
@@ -364,6 +366,28 @@ fun SettingsScreen(
         RadioRow("Funny — halka-phulka, jokes", personality == "funny") { personality = "funny"; prefs.personality = "funny" }
         RadioRow("Formal — professional", personality == "formal") { personality = "formal"; prefs.personality = "formal" }
 
+        Section("Auto-Send (ek baar allow, phir khud bhejega)")
+        Text(
+            "ON karne par tumhari awaaz par WhatsApp message / Facebook post tumhare bina tap kiye " +
+                "bhej diya jayega — sirf tumhare khud ke account se, sirf tumhare bole hue message par. " +
+                "Iske liye Accessibility service on honi chahiye. OFF karte hi auto-send turant band ho jata hai " +
+                "aur koi pending send bhi cancel ho jata hai; phir composer khulega aur tum khud Send/Post dabaoge.",
+            fontSize = 12.sp, color = TextSecondary
+        )
+        SwitchRow("WhatsApp Auto-Send", autoWa) { enabled ->
+            autoWa = enabled; prefs.autoSendWhatsApp = enabled
+        }
+        SwitchRow("Facebook Auto-Post", autoFb) { enabled ->
+            autoFb = enabled; prefs.autoSendFacebook = enabled
+        }
+        if (!PermissionGate.isGranted(context, PermissionGate.ACCESSIBILITY) && (autoWa || autoFb)) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Accessibility service abhi OFF hai — Auto-Send tabhi chalega jab wo on ho. Permissions dashboard se on karo.",
+                fontSize = 13.sp, color = Color(0xFFFFB020)
+            )
+        }
+
         Section("Privacy & permissions")
         Text(
             "Memories never include passwords or OTPs. Conversations stay on this device. " +
@@ -419,10 +443,11 @@ fun AboutScreen(onBack: () -> Unit) {
         "Groq AI (llama-3.3-70b, free tier)" to "Implemented — console.groq.com se free key, test connection ke saath",
         "LIA Setup Wizard (Play Protect, Restricted Settings, Accessibility, Overlay, keys, personality)" to "Implemented — pehli baar khud khulta hai, Home/Settings se dobara kholo",
         "Overlay / Draw over other apps permission" to "Implemented — Permissions dashboard + Setup Wizard se allow karo",
-        "WhatsApp message (chat khulta hai, message prefilled)" to "Implemented — user khud Send dabata hai; Android silently send nahi kar sakta",
+        "WhatsApp message (chat khulta hai, message prefilled)" to "Implemented — default composer mode (user taps Send); Auto-Send ON ho to khud bhej deta hai",
+        "Facebook post (composer khulta hai, text prefilled)" to "Implemented — default composer mode (user taps Post); Auto-Post ON ho to khud publish kar deta hai",
+        "WhatsApp / Facebook Auto-Send (one-time toggle, Accessibility)" to "Implemented, default OFF — sirf user ke khud ke account se, sirf uske bole hue message par; ek tap me band hota hai",
         "YouTube Music play (YouTube Music → YouTube → browser)" to "Implemented — jo khula, wahi bataya jata hai",
         "YouTube video play" to "Implemented — YouTube app ya browser me search khulta hai",
-        "Facebook post (composer khulta hai, text prefilled)" to "Implemented — user khud Post dabata hai; silent auto-post nahi hota",
         "Personality presets (JARVIS / Helpful / Funny / Formal)" to "Implemented — Settings ya Setup Wizard se chuno",
         "Provider & model picker (Gemini / Groq, model choice)" to "Implemented",
         "Permission-gated tools (calls, gallery, reminders…)" to "Implemented — bina permission ke koi kaam nahi, AI Hindi me permission maangti hai",
@@ -463,9 +488,11 @@ fun AboutScreen(onBack: () -> Unit) {
                 "works while the background service runs; on some phones only with the screen on.\n\n" +
                 "• An ordinary app cannot silently control every setting or third-party app — actions go " +
                 "through official Android APIs and intents, and the app reports verified success or failure.\n\n" +
-                "• WhatsApp aur Facebook par message/post CHUP-CHAAP nahi bheja ja sakta — app sirf composer " +
+                "• WhatsApp aur Facebook par message/post DEFAULT mode me chup-chaap nahi bheja jata — app sirf composer " +
                 "kholti hai jisme text pehle se likha hota hai; Send/Post tumhe khud dabana hota hai. " +
-                "Ye Android ki limit hai, app ki kami nahi.",
+                "Sirf jab tum khud Auto-Send toggle ON karte ho (Settings / Automation Center / Setup Wizard) " +
+                "aur Accessibility on hai, tab app tumhare bole hue message ko khud bhejti hai — sirf tumhare " +
+                "khud ke account se, aur toggle OFF karte hi ye turant band ho jata hai.",
             fontSize = 14.sp, color = TextSecondary
         )
         Spacer(Modifier.height(16.dp))

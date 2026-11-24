@@ -6,8 +6,8 @@ A production Android personal AI assistant: JARVIS / ALEXA characters, Gemini + 
 with function calling, Hindi/English/Hinglish voice chat, long-term memory (Room),
 phone control & automation, background assistant with wake word, notification reading,
 reminders, WhatsApp / YouTube Music / Facebook actions, a full permissions dashboard,
-and a LIA-style 6-step Setup Wizard (Play Protect, Restricted Settings, Accessibility,
-Overlay, API keys, personality/voice/model).
+and a LIA-style 7-step Setup Wizard (Play Protect, Restricted Settings, Accessibility,
+Overlay, API keys, Auto-Send permission, personality/voice/model).
 
 - Package: `ai.soumya.assistant`
 - Kotlin + Jetpack Compose, minSdk 29 (Android 10), targetSdk 34
@@ -44,10 +44,12 @@ quick actions, recent memories) → Chat → Memory Center → Automation Center
 - An ordinary app cannot silently control every setting or third-party app. Every action
   goes through official Android APIs/intents, and the app reports verified success or
   failure — it never claims success without checking.
-- **WhatsApp and Facebook cannot be sent/posted silently.** The app opens the WhatsApp chat
-  or Facebook composer with your text already typed — you tap Send/Post yourself. Android
-  gives no official way to auto-send, and this app never auto-taps Send/Post (no
-  Accessibility trickery on those buttons).
+- **WhatsApp and Facebook are composer-first by default.** The app opens the WhatsApp chat
+  or Facebook composer with your text already typed — you tap Send/Post yourself.
+  Only if you turn ON the one-time Auto-Send toggle (Settings / Automation Center / Home)
+  and grant Accessibility does the app tap Send/Post itself — once per message you asked
+  for, from your own account, with a 30-second timeout that falls back to the composer.
+  One tap on the toggle stops it immediately. Auto-send never touches passwords, OTPs or payments.
 
 See [FEATURE_STATUS.md](FEATURE_STATUS.md) for the per-feature status table.
 
