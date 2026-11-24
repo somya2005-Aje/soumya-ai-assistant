@@ -86,6 +86,9 @@ fun SettingsScreen(
     // ---- Auto-Send toggles (v1.2.0) — one tap to stop, takes effect at once.
     var autoWa by remember { mutableStateOf(prefs.autoSendWhatsApp) }
     var autoFb by remember { mutableStateOf(prefs.autoSendFacebook) }
+
+    // ---- Provider / model / personality (v1.2.0).
+    var provider by remember { mutableStateOf(prefs.aiProvider) }
     var personality by remember { mutableStateOf(prefs.personality) }
     var geminiModel by remember { mutableStateOf(prefs.geminiModel) }
     var groqModel by remember { mutableStateOf(prefs.groqModel) }
